@@ -17,7 +17,7 @@
                         {{ $farmer->last_name }}, {{ $farmer->first_name }}
                     </h3>
 
-                    <a href="{{ route('farmers.index') }}"
+                    <a href="{{ route('dashboard.farmers') }}"
                        class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
                         Back
                     </a>
@@ -94,21 +94,34 @@
                         Location
                     </h4>
 
+                    {{--
+                        NOTE: switched from raw relation access
+                        ($farmer->province->name) to the Farmer model's
+                        province_name / municipality_name / barangay_name
+                        accessors. Those accessors already handle:
+                          - relation not eager-loaded (falls back to a query)
+                          - relation loaded but null (optional() guards it)
+                          - ñ/Ñ cleanup via PlaceName::clean()
+                        If these still show "-", the underlying
+                        province_id/municipality_id/barangay_id on this
+                        farmer record are themselves null — check
+                        FarmerController::show() and the DB row directly.
+                    --}}
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 
                         <div>
                             <strong>Province:</strong><br>
-                            {{ $farmer->province->name ?? '-' }}
+                            {{ $farmer->province_name ?? '-' }}
                         </div>
 
                         <div>
                             <strong>Municipality:</strong><br>
-                            {{ $farmer->municipality->name ?? '-' }}
+                            {{ $farmer->municipality_name ?? '-' }}
                         </div>
 
                         <div>
                             <strong>Barangay:</strong><br>
-                            {{ $farmer->barangay->name ?? '-' }}
+                            {{ $farmer->barangay_name ?? '-' }}
                         </div>
 
                     </div>

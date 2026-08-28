@@ -14,6 +14,10 @@ RUN apt-get update && apt-get install -y \
     && docker-php-ext-install pdo pdo_pgsql pgsql mbstring exif pcntl bcmath gd zip \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Install Node.js (needed to build Vite/Tailwind frontend assets)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs
+
 # Enable Apache mod_rewrite (needed for Laravel's routing)
 RUN a2enmod rewrite
 
@@ -32,6 +36,9 @@ COPY . .
 
 # Install PHP dependencies (production, no dev packages)
 RUN composer install --optimize-autoloader --no-dev --no-interaction
+
+# Install frontend dependencies and build production assets (Vite/Tailwind)
+RUN npm install && npm run build
 
 # Set correct permissions for Laravel's storage and cache directories
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \

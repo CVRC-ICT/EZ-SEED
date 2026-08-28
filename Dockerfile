@@ -21,6 +21,13 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Enable Apache mod_rewrite (needed for Laravel's routing)
 RUN a2enmod rewrite
 
+# Allow .htaccess overrides so Laravel's URL rewriting works for direct/refreshed URLs
+RUN echo '<Directory /var/www/html/public>\n\
+    AllowOverride All\n\
+    Require all granted\n\
+</Directory>' > /etc/apache2/conf-available/laravel.conf \
+    && a2enconf laravel
+
 # Set the Apache document root to Laravel's public folder
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf

@@ -1,8 +1,10 @@
 <?php
+
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
@@ -11,10 +13,16 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Trust Render's reverse proxy so Laravel knows the original
+        // request was HTTPS, and generates https:// URLs for assets,
+        // redirects, etc. instead of defaulting to http://.
+        $middleware->trustProxies(at: '*');
+
         $middleware->alias([
             'admin'          => \App\Http\Middleware\EnsureUserIsAdministrator::class,
             'account.usable' => \App\Http\Middleware\EnsureAccountIsUsable::class,
         ]);
+
         // Runs on every authenticated web request: logs out deactivated
         // accounts and enforces the forced first-login password change.
         $middleware->web(append: [

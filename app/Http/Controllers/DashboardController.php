@@ -125,7 +125,7 @@ class DashboardController extends Controller
     protected function availableYears(): array
     {
         return (clone $this->surveyScope())
-            ->selectRaw('DISTINCT YEAR(COALESCE(submitted_at, created_at)) as y')
+            ->selectRaw('DISTINCT EXTRACT(YEAR FROM COALESCE(submitted_at, created_at)) as y')
             ->orderByDesc('y')
             ->pluck('y')
             ->filter()
@@ -575,7 +575,7 @@ class DashboardController extends Controller
         $monthly = Survey::whereIn('id', $surveyIds)
             ->where('status', 'submitted')
             ->select(
-                DB::raw('MONTH(COALESCE(submitted_at, created_at)) as month'),
+                DB::raw('EXTRACT(MONTH FROM COALESCE(submitted_at, created_at)) as month'),
                 DB::raw("COUNT(CASE WHEN id IN (
                     SELECT survey_id FROM seed_preferences WHERE season = 'Dry Season'
                 ) THEN 1 END) as dry_total"),

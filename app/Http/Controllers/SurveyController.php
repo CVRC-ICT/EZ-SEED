@@ -381,33 +381,32 @@ class SurveyController extends Controller
                 'seed_criteria_others' => ['required_if:seed_criteria.*,others', 'nullable', 'string', 'max:255'],
             ],
 
-            // Step 6: Seed Variety Preference — nested season -> type -> variety cards,
-            // each with its own reasons[] and problems[] checkboxes.
+            // Step 6: Seed Variety Preference — now nested crop -> season ->
+            // seed_type -> a list of variety cards. Crop is Rice or Corn;
+            // seed_type is Hybrid/Inbred for Rice, Hybrid/OPV for Corn.
+            // Entirely optional — a farmer may fill in only one combination
+            // and leave the rest empty.
             6 => [
                 'preferences' => ['nullable', 'array'],
-                'preferences.*.*.*.crop' => ['nullable', 'in:rice,corn'],
-                'preferences.*.*.*.variety' => ['nullable', 'string', 'max:255'],
-                'preferences.*.*.*.source_of_information' => ['nullable', 'string', 'max:255'],
-                'preferences.*.*.*.actual_yield' => ['nullable', 'numeric', 'min:0'],
-                'preferences.*.*.*.area_planted' => ['nullable', 'numeric', 'min:0'],
-                'preferences.*.*.*.maturity_days' => ['nullable', 'integer', 'min:0'],
-                'preferences.*.*.*.reasons' => ['nullable', 'array'],
-                'preferences.*.*.*.reasons.*' => ['string'],
-                'preferences.*.*.*.problems' => ['nullable', 'array'],
-                'preferences.*.*.*.problems.*' => ['string'],
+                'preferences.*.*.*.*.variety' => ['nullable', 'string', 'max:255'],
+                'preferences.*.*.*.*.source_of_information' => ['nullable', 'string', 'max:255'],
+                'preferences.*.*.*.*.actual_yield' => ['nullable', 'numeric', 'min:0'],
+                'preferences.*.*.*.*.area_planted' => ['nullable', 'numeric', 'min:0'],
+                'preferences.*.*.*.*.maturity_days' => ['nullable', 'integer', 'min:0'],
+                'preferences.*.*.*.*.reasons' => ['nullable', 'array'],
+                'preferences.*.*.*.*.reasons.*' => ['string'],
+                'preferences.*.*.*.*.problems' => ['nullable', 'array'],
+                'preferences.*.*.*.*.problems.*' => ['string'],
             ],
 
-            // Step 7: Varieties Planted — now optional. If left completely
-            // empty, nothing is required. If any row is started, that row's
-            // fields are still validated for sane values, but the row can
-            // also be left incomplete without blocking progress.
+            // Step 7: Varieties Planted — mandatory again per request.
             7 => [
-                'planted' => ['nullable', 'array'],
-                'planted.*.season' => ['nullable', 'in:dry,wet'],
-                'planted.*.crop' => ['nullable', 'string', 'max:255'],
-                'planted.*.variety' => ['nullable', 'string', 'max:255'],
-                'planted.*.area' => ['nullable', 'numeric', 'min:0'],
-                'planted.*.yield' => ['nullable', 'numeric', 'min:0'],
+                'planted' => ['required', 'array', 'min:1'],
+                'planted.*.season' => ['required', 'in:dry,wet'],
+                'planted.*.crop' => ['required', 'string', 'max:255'],
+                'planted.*.variety' => ['required', 'string', 'max:255'],
+                'planted.*.area' => ['required', 'numeric', 'min:0'],
+                'planted.*.yield' => ['required', 'numeric', 'min:0'],
             ],
 
             // Step 8: Government Seed Subsidy
@@ -722,43 +721,55 @@ class SurveyController extends Controller
             ? implode(', ', $data['problems_encountered'])
             : ($data['problems_encountered'] ?? null);
 
-        foreach (['dry', 'wet'] as $season) {
-            foreach (['hybrid', 'inbred'] as $seedType) {
-                $entries = data_get($data, "preferences.{$season}.{$seedType}", []);
+        // NEW: loop crop -> season -> seed_type. Rice uses hybrid/inbred;
+        // Corn uses hybrid/opv. OPV is treated as Inbred for the
+        // SeedVariety/SeedPreference seed_type column, since it's
+        // non-hybrid open-pollinated seed and the DB schema only has
+        // Hybrid/Inbred as seed_type values.
+        $cropSeedTypes = [
+            'rice' => ['hybrid', 'inbred'],
+            'corn' => ['hybrid', 'opv'],
+        ];
 
-                foreach ($entries as $pref) {
-                    if (empty($pref['variety'])) {
-                        continue;
-                    }
+        foreach ($cropSeedTypes as $crop => $seedTypeKeys) {
+            foreach (['dry', 'wet'] as $season) {
+                foreach ($seedTypeKeys as $seedTypeKey) {
+                    $entries = data_get($data, "preferences.{$crop}.{$season}.{$seedTypeKey}", []);
 
-                    $mappedSeason = $this->mapSeason($season);
-                    $mappedSeedType = $this->mapSeedType($seedType);
-                    $reasonLabels = collect($pref['reasons'] ?? [])->implode(', ');
-                    $problemLabels = collect($pref['problems'] ?? [])->implode(', ');
+                    foreach ($entries as $pref) {
+                        if (empty($pref['variety'])) {
+                            continue;
+                        }
 
-                    $variety = \App\Models\SeedVariety::firstOrCreate(
-                        ['variety_name' => $pref['variety']],
-                        [
-                            'seed_type' => $mappedSeedType,
+                        $mappedSeason = $this->mapSeason($season);
+                        $mappedSeedType = $seedTypeKey === 'hybrid' ? 'Hybrid' : 'Inbred';
+                        $reasonLabels = collect($pref['reasons'] ?? [])->implode(', ');
+                        $problemLabels = collect($pref['problems'] ?? [])->implode(', ');
+
+                        $variety = \App\Models\SeedVariety::firstOrCreate(
+                            ['variety_name' => $pref['variety']],
+                            [
+                                'seed_type' => $mappedSeedType,
+                                'season' => $mappedSeason,
+                                'crop_type' => ucfirst($crop),
+                                'is_active' => true,
+                            ]
+                        );
+
+                        $problemsValue = $pref['problems'] ?? $problemsEncounteredFlat;
+
+                        \App\Models\SeedPreference::create([
+                            'survey_id' => $survey->id,
+                            'seed_variety_id' => $variety->id,
                             'season' => $mappedSeason,
-                            'crop_type' => ucfirst($data['crop_type'] ?? 'rice'),
-                            'is_active' => true,
-                        ]
-                    );
-
-                    $problemsValue = $pref['problems'] ?? $problemsEncounteredFlat;
-
-                    \App\Models\SeedPreference::create([
-                        'survey_id' => $survey->id,
-                        'seed_variety_id' => $variety->id,
-                        'season' => $mappedSeason,
-                        'seed_type' => $mappedSeedType,
-                        'reason' => $reasonLabels ?: null,
-                        'reason_category' => $this->categorizeReason($reasonLabels),
-                        'problems_encountered' => is_array($problemsValue)
-                            ? (empty($problemsValue) ? null : implode(', ', $problemsValue))
-                            : $problemsValue,
-                    ]);
+                            'seed_type' => $mappedSeedType,
+                            'reason' => $reasonLabels ?: null,
+                            'reason_category' => $this->categorizeReason($reasonLabels),
+                            'problems_encountered' => is_array($problemsValue)
+                                ? (empty($problemsValue) ? null : implode(', ', $problemsValue))
+                                : $problemsValue,
+                        ]);
+                    }
                 }
             }
         }

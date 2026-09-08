@@ -27,7 +27,7 @@
                 </div>
                 <div class="flex-1">
                     <h2 class="text-xl sm:text-2xl font-bold text-gray-900">Varieties Planted</h2>
-                    <p class="text-sm text-gray-600">Crop Year 2024–2025 planting record.</p>
+                    <p class="text-sm text-gray-600">Crop Year 2024–2025 planting record. <span class="text-red-600 font-semibold">All fields required.</span></p>
                 </div>
                 <div id="syncStatus" class="flex-shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full bg-gray-100 text-gray-500">
                     &nbsp;
@@ -40,11 +40,11 @@
                 <table class="min-w-[720px] w-full divide-y divide-gray-200 text-sm">
                     <thead class="bg-da-green-700 text-white">
                         <tr>
-                            <th class="px-4 py-3 text-left font-semibold">Season</th>
-                            <th class="px-4 py-3 text-left font-semibold">Crop</th>
-                            <th class="px-4 py-3 text-left font-semibold">Variety</th>
-                            <th class="px-4 py-3 text-left font-semibold">Area Planted (ha)</th>
-                            <th class="px-4 py-3 text-left font-semibold">Yield (t)</th>
+                            <th class="px-4 py-3 text-left font-semibold">Season <span class="text-red-200">*</span></th>
+                            <th class="px-4 py-3 text-left font-semibold">Crop <span class="text-red-200">*</span></th>
+                            <th class="px-4 py-3 text-left font-semibold">Variety <span class="text-red-200">*</span></th>
+                            <th class="px-4 py-3 text-left font-semibold">Area Planted (ha) <span class="text-red-200">*</span></th>
+                            <th class="px-4 py-3 text-left font-semibold">Yield (t) <span class="text-red-200">*</span></th>
                             <th class="px-4 py-3 text-center font-semibold">Action</th>
                         </tr>
                     </thead>
@@ -52,7 +52,7 @@
                         @foreach ($savedPlanted as $index => $row)
                             <tr class="planted-row">
                                 <td class="px-4 py-3">
-                                    <select name="planted[{{ $index }}][season]"
+                                    <select name="planted[{{ $index }}][season]" required
                                             class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5">
                                         <option value="" disabled {{ empty($row['season'] ?? null) ? 'selected' : '' }}>Select</option>
                                         <option value="dry" {{ ($row['season'] ?? '') == 'dry' ? 'selected' : '' }}>Dry Season</option>
@@ -60,22 +60,22 @@
                                     </select>
                                 </td>
                                 <td class="px-4 py-3">
-                                    <input type="text" name="planted[{{ $index }}][crop]" placeholder="e.g. Rice, Corn"
+                                    <input type="text" name="planted[{{ $index }}][crop]" placeholder="e.g. Rice, Corn" required
                                            value="{{ $row['crop'] ?? '' }}"
                                            class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5">
                                 </td>
                                 <td class="px-4 py-3">
-                                    <input type="text" name="planted[{{ $index }}][variety]" placeholder="e.g. NSIC Rc 216"
+                                    <input type="text" name="planted[{{ $index }}][variety]" placeholder="e.g. NSIC Rc 216" required
                                            value="{{ $row['variety'] ?? '' }}"
                                            class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5">
                                 </td>
                                 <td class="px-4 py-3">
-                                    <input type="number" step="0.01" min="0" name="planted[{{ $index }}][area]"
+                                    <input type="number" step="0.01" min="0" name="planted[{{ $index }}][area]" required
                                            value="{{ $row['area'] ?? '' }}"
                                            class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5">
                                 </td>
                                 <td class="px-4 py-3">
-                                    <input type="number" step="0.01" min="0" name="planted[{{ $index }}][yield]"
+                                    <input type="number" step="0.01" min="0" name="planted[{{ $index }}][yield]" required
                                            value="{{ $row['yield'] ?? '' }}"
                                            class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5">
                                 </td>
@@ -138,16 +138,16 @@
         row.className = 'planted-row';
         row.innerHTML = `
             <td class="px-4 py-3">
-                <select name="planted[${index}][season]" class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5">
+                <select name="planted[${index}][season]" required class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5">
                     <option value="" disabled selected>Select</option>
                     <option value="dry">Dry Season</option>
                     <option value="wet">Wet Season</option>
                 </select>
             </td>
-            <td class="px-4 py-3"><input type="text" name="planted[${index}][crop]" placeholder="e.g. Rice, Corn" class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5"></td>
-            <td class="px-4 py-3"><input type="text" name="planted[${index}][variety]" placeholder="e.g. NSIC Rc 216" class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5"></td>
-            <td class="px-4 py-3"><input type="number" step="0.01" min="0" name="planted[${index}][area]" class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5"></td>
-            <td class="px-4 py-3"><input type="number" step="0.01" min="0" name="planted[${index}][yield]" class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5"></td>
+            <td class="px-4 py-3"><input type="text" name="planted[${index}][crop]" placeholder="e.g. Rice, Corn" required class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5"></td>
+            <td class="px-4 py-3"><input type="text" name="planted[${index}][variety]" placeholder="e.g. NSIC Rc 216" required class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5"></td>
+            <td class="px-4 py-3"><input type="number" step="0.01" min="0" name="planted[${index}][area]" required class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5"></td>
+            <td class="px-4 py-3"><input type="number" step="0.01" min="0" name="planted[${index}][yield]" required class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5"></td>
             <td class="px-4 py-3 text-center">
                 <button type="button" onclick="removePlantedRow(this)" class="remove-planted-row text-red-500 hover:text-red-700 focus:outline-none" aria-label="Remove row">
                     <svg class="w-5 h-5 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

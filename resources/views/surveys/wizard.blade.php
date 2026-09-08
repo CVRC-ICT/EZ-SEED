@@ -224,5 +224,27 @@
     @include('surveys.partials.offline-drafts-drawer')
 
     @stack('scripts')
+
+    <script>
+    // Auto-capitalize the first letter of every word in text inputs/textareas,
+    // applied globally across every survey step. Skips inputs that shouldn't
+    // be touched (numbers, dates, emails, selects, etc.) automatically since
+    // it only targets type="text" and <textarea>.
+    document.addEventListener('input', function (e) {
+        const el = e.target;
+        const isTextInput = el.tagName === 'TEXTAREA' ||
+            (el.tagName === 'INPUT' && el.type === 'text');
+
+        if (!isTextInput || el.dataset.noAutocap) return;
+
+        const cursorPos = el.selectionStart;
+        const capitalized = el.value.replace(/(^|\s)([a-z])/g, (m, boundary, letter) => boundary + letter.toUpperCase());
+
+        if (capitalized !== el.value) {
+            el.value = capitalized;
+            el.setSelectionRange(cursorPos, cursorPos);
+        }
+    });
+</script>
 </body>
 </html>

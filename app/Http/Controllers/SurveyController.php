@@ -396,14 +396,17 @@ class SurveyController extends Controller
                 'preferences.*.*.*.problems.*' => ['string'],
             ],
 
-            // Step 7: Varieties Planted
+            // Step 7: Varieties Planted — now optional. If left completely
+            // empty, nothing is required. If any row is started, that row's
+            // fields are still validated for sane values, but the row can
+            // also be left incomplete without blocking progress.
             7 => [
-                'planted' => ['required', 'array', 'min:1'],
-                'planted.*.season' => ['required', 'in:dry,wet'],
-                'planted.*.crop' => ['required', 'string', 'max:255'],
-                'planted.*.variety' => ['required', 'string', 'max:255'],
-                'planted.*.area' => ['required', 'numeric', 'min:0'],
-                'planted.*.yield' => ['required', 'numeric', 'min:0'],
+                'planted' => ['nullable', 'array'],
+                'planted.*.season' => ['nullable', 'in:dry,wet'],
+                'planted.*.crop' => ['nullable', 'string', 'max:255'],
+                'planted.*.variety' => ['nullable', 'string', 'max:255'],
+                'planted.*.area' => ['nullable', 'numeric', 'min:0'],
+                'planted.*.yield' => ['nullable', 'numeric', 'min:0'],
             ],
 
             // Step 8: Government Seed Subsidy

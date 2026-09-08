@@ -39,11 +39,86 @@
         'none' => 'None',
         'others' => 'Others',
     ];
+
+    // NEW: Variety Name is now a searchable dropdown (HTML datalist), split
+    // by CROP (Rice / Corn) as well as by seed_type (the four sections
+    // already split by Hybrid/Inbred). Each variety card has its own
+    // "Crop" selector; choosing Rice or Corn swaps which datalist the
+    // Variety Name field points at via JS. OPV corn is grouped under
+    // "Inbred Corn" since it's non-hybrid open-pollinated seed. People can
+    // still type a variety not on the list — the datalist only suggests.
+    $varietyOptions = [
+        'hybrid' => [
+            'rice' => [
+                'PSB Rc 26H (Magat)', 'PSB Rc 72H (Mestizo 1)', 'PSB Rc 76H (Panay)',
+                'NSIC Rc 114H (Mestizo 2)', 'NSIC Rc 116H (Mestizo 3)', 'NSIC Rc 124H (Mestizo 4)',
+                'NSIC Rc 126H (Mestizo 5)', 'NSIC Rc 132H (Mestizo 6)', 'NSIC Rc 162H', 'NSIC Rc 164H',
+                'NSIC Rc 202H (Mestiso 19)', 'NSIC Rc 204H (Mestiso 20)', 'NSIC Rc 240H (Mestiso 22)',
+                'NSIC Rc 244H (Mestiso 29)', 'NSIC Rc 262H (Mestiso 38)', 'NSIC Rc 518H', 'NSIC Rc 522H',
+                'NSIC Rc 550H', 'NSIC Rc 552H', 'NSIC Rc 586H', 'NSIC Rc 588H', 'NSIC Rc 614H',
+                'NSIC Rc 616H', 'NSIC Rc 618H',
+            ],
+            'corn' => [
+                'CW 851', 'TSG 398', 'TSG 361', 'TSG 81', 'P30B80', 'P30T80', 'P3482YR', 'PAC 105',
+                'Healer 101', 'P30D44', 'Bioseed 9899', 'Ghen 703', 'EG501', 'USM Var 35', 'Filipina 753',
+                'Ghen 802', 'Farco 88',
+                'DK8899S (GM Hybrid)', 'NK6130 BGT (GM Hybrid)', 'H101G (GM Hybrid)',
+                'J505 (GM Hybrid)', 'DK9132RRYG (GM Hybrid)', 'DK9132RRYG2 (GM Hybrid)',
+            ],
+        ],
+        'inbred' => [
+            'rice' => [
+                'NSIC Rc 18', 'NSIC Rc 160', 'NSIC Rc 216', 'NSIC Rc 218', 'NSIC Rc 222', 'NSIC Rc 238',
+                'NSIC Rc 300', 'NSIC Rc 302', 'NSIC Rc 308', 'NSIC Rc 352', 'NSIC Rc 354 (Tubigan 28)',
+                'NSIC Rc 356', 'NSIC Rc 358 (Tubigan 30)', 'NSIC Rc 394', 'NSIC Rc 400', 'NSIC Rc 402',
+                'NSIC Rc 480', 'NSIC Rc 506', 'NSIC Rc 508', 'NSIC Rc 512', 'NSIC Rc 534', 'NSIC Rc 558',
+                'NSIC Rc 560', 'NSIC Rc 562', 'NSIC Rc 564', 'NSIC Rc 568', 'NSIC Rc 572', 'NSIC Rc 574',
+                'NSIC Rc 578', 'NSIC Rc 580', 'NSIC Rc 582', 'NSIC Rc 584', 'NSIC Rc 592', 'NSIC Rc 594',
+                'NSIC Rc 600', 'NSIC Rc 602', 'NSIC Rc 604', 'NSIC Rc 622', 'NSIC Rc 624', 'NSIC Rc 626',
+                'NSIC Rc 628', 'NSIC Rc 630', 'NSIC Rc 632', 'NSIC Rc 634', 'NSIC Rc 636',
+                'NSIC Rc 638 SR (Special-purpose/pigmented)', 'NSIC Rc 640 SR (Special-purpose/pigmented)',
+                'NSIC Rc 642 SR (Special-purpose/pigmented)', 'NSIC Rc 644 SR (Special-purpose/pigmented)',
+                'NSIC Rc 646 SR (Special-purpose/pigmented)', 'NSIC Rc 648 (Zinc-biofortified)',
+                'NSIC Rc 650 (Rainfed lowland)',
+            ],
+            'corn' => [
+                'IES Cn 5 (Yellow OPV)', 'IES Cn 7 (Yellow OPV)', 'IES 89-06 (White OPV)',
+                'IES 89-10 (White OPV)', 'IES 89-12 (White OPV)', 'IES 09-02 (White OPV)',
+                'IES Glut #2 (Glutinous OPV)', 'IES Glut #3 (Glutinous OPV)', 'IES Glut #4 (Glutinous OPV)',
+                'IES Glut #6 (Glutinous OPV)', 'IES Glut #7 (Glutinous OPV)', 'Tupi 1 WIT', 'Tupi WIT',
+                'Farco 58', 'IES Cn 1 (IES Var 7)', 'IES Cn 2 (IES Var 2)', 'IES Glut # 1', 'IES Cn 6',
+                'IES E-02', 'IES Cn 3', 'IES Cn 4', 'IES 09-2', 'IES Cn 9', 'IES 10-04', 'IES Glut 8',
+                'IES Glut 10', 'IES Cn 11', 'CVRC Cn 13', 'CVRC 12-06', 'CVRC Glut No. 12', 'CVRC Cn 15',
+                'CVRC Glut No. 18-14', 'CVRC Glut 21-16',
+            ],
+        ],
+    ];
 @endphp
 
 @section('content')
 <form id="wizardStepForm" method="POST" action="{{ isset($farmer) ? route('surveys.step.store', ['farmer' => $farmer, 'step' => 6]) : url("/survey/local/{$uuid}/step/6") }}" novalidate>
     @csrf
+
+    <datalist id="hybridRiceVarietyList">
+        @foreach ($varietyOptions['hybrid']['rice'] as $option)
+            <option value="{{ $option }}">
+        @endforeach
+    </datalist>
+    <datalist id="hybridCornVarietyList">
+        @foreach ($varietyOptions['hybrid']['corn'] as $option)
+            <option value="{{ $option }}">
+        @endforeach
+    </datalist>
+    <datalist id="inbredRiceVarietyList">
+        @foreach ($varietyOptions['inbred']['rice'] as $option)
+            <option value="{{ $option }}">
+        @endforeach
+    </datalist>
+    <datalist id="inbredCornVarietyList">
+        @foreach ($varietyOptions['inbred']['corn'] as $option)
+            <option value="{{ $option }}">
+        @endforeach
+    </datalist>
 
     <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
 
@@ -89,6 +164,10 @@
                         <div id="varietyCards_{{ $groupKey }}" class="space-y-4" data-season="{{ $season }}" data-type="{{ $type }}" data-group="{{ $groupKey }}">
                             @foreach ($entries as $index => $entry)
                                 @if (! empty($entry['variety'] ?? null))
+                                    @php
+                                        $savedCrop = $entry['crop'] ?? 'rice';
+                                        $datalistId = $type . ucfirst($savedCrop) . 'VarietyList';
+                                    @endphp
                                     <div class="variety-card bg-gray-50 border-2 border-gray-200 rounded-xl p-5">
                                         <div class="flex items-center justify-between mb-4">
                                             <span class="variety-card-number text-sm font-bold text-gray-800">Variety #{{ $index + 1 }}</span>
@@ -103,10 +182,31 @@
 
                                         <div class="space-y-4">
                                             <div>
+                                                <label class="block text-sm font-semibold text-gray-700 mb-1.5">Crop</label>
+                                                <div class="flex gap-3">
+                                                    <label class="flex items-center gap-2 cursor-pointer">
+                                                        <input type="radio" name="preferences[{{ $season }}][{{ $type }}][{{ $index }}][crop]" value="rice"
+                                                               class="variety-crop-radio w-4 h-4 text-da-green-600 border-gray-400 focus:ring-da-green-600"
+                                                               {{ $savedCrop === 'rice' ? 'checked' : '' }}
+                                                               onchange="updateVarietyDatalist(this)">
+                                                        <span class="text-sm text-gray-700">Rice</span>
+                                                    </label>
+                                                    <label class="flex items-center gap-2 cursor-pointer">
+                                                        <input type="radio" name="preferences[{{ $season }}][{{ $type }}][{{ $index }}][crop]" value="corn"
+                                                               class="variety-crop-radio w-4 h-4 text-da-green-600 border-gray-400 focus:ring-da-green-600"
+                                                               {{ $savedCrop === 'corn' ? 'checked' : '' }}
+                                                               onchange="updateVarietyDatalist(this)">
+                                                        <span class="text-sm text-gray-700">Corn</span>
+                                                    </label>
+                                                </div>
+                                            </div>
+
+                                            <div>
                                                 <label class="block text-sm font-semibold text-gray-700 mb-1.5">Variety Name</label>
                                                 <input type="text" name="preferences[{{ $season }}][{{ $type }}][{{ $index }}][variety]"
-                                                       value="{{ $entry['variety'] ?? '' }}" placeholder="Enter variety name"
-                                                       class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 text-base py-2.5 px-3.5">
+                                                       value="{{ $entry['variety'] ?? '' }}" placeholder="Type or select a variety"
+                                                       list="{{ $datalistId }}" data-type="{{ $type }}"
+                                                       class="variety-name-input w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 text-base py-2.5 px-3.5">
                                             </div>
                                             <div>
                                                 <label class="block text-sm font-semibold text-gray-700 mb-1.5">Source of Information</label>
@@ -214,6 +314,15 @@
         groupCounters[el.dataset.group] = el.querySelectorAll('.variety-card').length;
     });
 
+    function updateVarietyDatalist(radio) {
+        const card = radio.closest('.variety-card');
+        const nameInput = card.querySelector('.variety-name-input');
+        const type = nameInput.dataset.type;
+        const crop = radio.value;
+        const datalistId = type + crop.charAt(0).toUpperCase() + crop.slice(1) + 'VarietyList';
+        nameInput.setAttribute('list', datalistId);
+    }
+
     function buildCheckboxGrid(options, season, type, index, field, colorClass) {
         return Object.entries(options).map(([key, label]) => `
             <label class="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-gray-50 transition">
@@ -234,6 +343,8 @@
         }
 
         const index = groupCounters[groupKey]++;
+        const defaultDatalistId = type + 'RiceVarietyList';
+
         const card = document.createElement('div');
         card.className = 'variety-card bg-gray-50 border-2 border-gray-200 rounded-xl p-5';
         card.innerHTML = `
@@ -249,9 +360,27 @@
             </div>
             <div class="space-y-4">
                 <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Crop</label>
+                    <div class="flex gap-3">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="preferences[${season}][${type}][${index}][crop]" value="rice" checked
+                                   class="variety-crop-radio w-4 h-4 text-da-green-600 border-gray-400 focus:ring-da-green-600"
+                                   onchange="updateVarietyDatalist(this)">
+                            <span class="text-sm text-gray-700">Rice</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="preferences[${season}][${type}][${index}][crop]" value="corn"
+                                   class="variety-crop-radio w-4 h-4 text-da-green-600 border-gray-400 focus:ring-da-green-600"
+                                   onchange="updateVarietyDatalist(this)">
+                            <span class="text-sm text-gray-700">Corn</span>
+                        </label>
+                    </div>
+                </div>
+                <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-1.5">Variety Name</label>
-                    <input type="text" name="preferences[${season}][${type}][${index}][variety]" placeholder="Enter variety name"
-                           class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 text-base py-2.5 px-3.5">
+                    <input type="text" name="preferences[${season}][${type}][${index}][variety]" placeholder="Type or select a variety"
+                           list="${defaultDatalistId}" data-type="${type}"
+                           class="variety-name-input w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 text-base py-2.5 px-3.5">
                 </div>
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-1.5">Source of Information</label>

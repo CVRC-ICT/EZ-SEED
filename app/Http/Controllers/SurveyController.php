@@ -385,6 +385,7 @@ class SurveyController extends Controller
             // each with its own reasons[] and problems[] checkboxes.
             6 => [
                 'preferences' => ['nullable', 'array'],
+                'preferences.*.*.*.crop' => ['nullable', 'in:rice,corn'],
                 'preferences.*.*.*.variety' => ['nullable', 'string', 'max:255'],
                 'preferences.*.*.*.source_of_information' => ['nullable', 'string', 'max:255'],
                 'preferences.*.*.*.actual_yield' => ['nullable', 'numeric', 'min:0'],

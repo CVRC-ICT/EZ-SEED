@@ -141,13 +141,7 @@
 
             <hr class="border-gray-200">
 
-            {{-- Farmer's Address — NEW. Same cascading province/municipality/
-                 barangay pattern used by Step 1's enumerator location and
-                 Step 3's farm location, under the "farmer_" name prefix so
-                 it doesn't collide with either of those. This is the
-                 farmer's home/residential address, which is not
-                 necessarily the same as where the farm itself is located
-                 (that's captured separately in Step 3). --}}
+            {{-- Farmer's Address --}}
             <section>
                 <h3 class="text-base font-semibold text-gray-900 mb-4">Farmer's Address</h3>
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-5">
@@ -241,12 +235,15 @@
                         @enderror
                     </div>
 
+                    {{-- CHANGED: Contact Number is now optional — required
+                         attribute removed, red asterisk swapped for an
+                         "(optional)" label so it matches the backend rule. --}}
                     <div>
                         <label for="contact_number" class="block text-sm font-semibold text-gray-700 mb-1.5">
-                            Contact Number <span class="text-red-600">*</span>
+                            Contact Number <span class="text-xs font-normal text-gray-500">(optional)</span>
                         </label>
                         <input type="tel" id="contact_number" name="contact_number"
-                               value="{{ old('contact_number', data_get($old_data, 'contact_number')) }}" required
+                               value="{{ old('contact_number', data_get($old_data, 'contact_number')) }}"
                                placeholder="09XXXXXXXXX"
                                class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 text-base py-2.5 px-3.5 @error('contact_number') border-red-500 @enderror">
                         @error('contact_number')
@@ -459,9 +456,6 @@
     });
 
     // Farmer's Address cascading Province -> Municipality -> Barangay.
-    // Same pattern as Step 1 (enumerator location) and Step 3 (farm
-    // location) — kept as a self-contained IIFE per step so each step's
-    // copy only wires up its own selects.
     (function () {
         const provinceSelect = document.getElementById('farmer_province_id');
         const municipalitySelect = document.getElementById('farmer_municipality_id');
@@ -529,11 +523,6 @@
         provinceSelect.addEventListener('change', (e) => loadMunicipalities(e.target.value));
         municipalitySelect.addEventListener('change', (e) => loadBarangays(e.target.value));
 
-        // NOTE: the local-first-init.blade.php partial's hydrateLocationCascades()
-        // takes over restoring saved values from IndexedDB for the local/offline
-        // flow — this DOMContentLoaded handler only matters for the legacy
-        // {farmer}-session flow, which still renders data-old from server-side
-        // old_data.
         document.addEventListener('DOMContentLoaded', () => {
             const oldProvince = provinceSelect.dataset.old;
             const oldMunicipality = municipalitySelect.dataset.old;

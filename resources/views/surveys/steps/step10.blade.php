@@ -29,15 +29,7 @@
 
         <div class="px-6 sm:px-8 py-7 space-y-8">
 
-            {{-- Survey Summary Snapshot
-                 FIX: this used to read from an $summary variable that
-                 LocalSurveyController::showStep() never actually passes
-                 (there is no server-side hydration in the local/offline
-                 flow — everything lives in IndexedDB). isset($summary)
-                 was therefore always false, so every field always showed
-                 "—" regardless of what was actually filled in. Now these
-                 spans are populated client-side by the script below,
-                 the same way local-review.blade.php builds its summary. --}}
+            {{-- Survey Summary Snapshot --}}
             <section>
                 <h3 class="text-base font-semibold text-gray-900 mb-3">Survey Summary</h3>
                 <div class="bg-gray-50 border border-gray-200 rounded-xl p-5 sm:p-6 space-y-3">
@@ -72,6 +64,59 @@
                         responses will require coordination with the Municipal Agriculture Office. Make sure all
                         information reflects the farmer's true and accurate responses.
                     </p>
+                </div>
+            </section>
+
+            {{-- NEW: Proof of Interview — only shown when the farmer answered
+                 WITHOUT DA assistance. $needsProofHere is passed from
+                 SurveyController::showStep() for the {farmer} flow. The
+                 local/offline flow ($uuid) doesn't have server-side access
+                 to assisted_by_da at render time, so a small inline script
+                 below checks IndexedDB and reveals this section client-side
+                 in that case instead. --}}
+            <section id="proofOfInterviewSection"
+                     class="{{ ($needsProofHere ?? false) ? '' : 'hidden' }} bg-da-green-50/50 border-2 border-da-green-200 rounded-2xl p-5 sm:p-6 space-y-5">
+                <div class="flex items-center gap-2">
+                    <svg class="w-5 h-5 text-da-green-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                    </svg>
+                    <h3 class="text-base font-bold text-gray-900">Proof of Interview</h3>
+                </div>
+                <p class="text-sm text-gray-600 -mt-2">
+                    Since you answered this survey on your own, please take a photo and sign below as proof of your participation.
+                </p>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+                            Photo <span class="text-red-600">*</span>
+                        </label>
+                        <input type="file" id="proofPhotoInput" accept="image/*" capture="environment"
+                               class="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-da-green-600 file:text-white file:font-semibold hover:file:bg-da-green-700 file:cursor-pointer cursor-pointer">
+                        <input type="hidden" name="proof_photo" id="proof_photo" value="{{ old('proof_photo', data_get($old_data, 'proof_photo')) }}">
+                        <img id="proofPhotoPreview" class="mt-3 max-h-48 rounded-lg border border-gray-300 {{ data_get($old_data, 'proof_photo') ? '' : 'hidden' }}"
+                             src="{{ data_get($old_data, 'proof_photo') }}" alt="Photo preview">
+                        @error('proof_photo')
+                            <p class="mt-1.5 text-sm text-red-600 font-medium">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+                            Your Signature <span class="text-red-600">*</span>
+                        </label>
+                        <canvas id="proofSignatureCanvas" width="320" height="140"
+                                class="border-2 border-gray-300 rounded-lg bg-white w-full touch-none cursor-crosshair"></canvas>
+                        <input type="hidden" name="proof_signature" id="proof_signature" value="{{ old('proof_signature', data_get($old_data, 'proof_signature')) }}">
+                        <button type="button" id="clearSignatureBtn"
+                                class="mt-2 text-sm font-semibold text-gray-600 hover:text-gray-800">
+                            Clear Signature
+                        </button>
+                        @error('proof_signature')
+                            <p class="mt-1.5 text-sm text-red-600 font-medium">{{ $message }}</p>
+                        @enderror
+                    </div>
                 </div>
             </section>
 
@@ -112,19 +157,14 @@
 </form>
 
 @push('scripts')
-{{-- Populate the Survey Summary snapshot from IndexedDB. This only runs for
-     the local/offline flow (when $uuid is set) — the legacy {farmer} flow
-     never had this problem since it isn't affected by this bug. --}}
+{{-- Populate the Survey Summary snapshot from IndexedDB, AND (NEW) reveal
+     the Proof of Interview section client-side when assisted_by_da is
+     'no' — the local/offline flow has no server-side way to know this at
+     render time, since everything lives in IndexedDB, not the session. --}}
 @if (!isset($farmer))
 <script>
     (function () {
         const uuid = @json($uuid);
-
-        function esc(str) {
-            const div = document.createElement('div');
-            div.textContent = str ?? '';
-            return div.innerHTML;
-        }
 
         async function populateSummary() {
             try {
@@ -142,21 +182,18 @@
                 if (nameEl) nameEl.textContent = fullName || '—';
                 if (rsbsaEl) rsbsaEl.textContent = p.rsbsa_number || '—';
 
-                // Province/Municipality/Barangay names aren't cached locally,
-                // only their IDs — same limitation noted on the review page.
-                // Showing "Saved (syncs to show full location)" is more
-                // honest than a bare "—" when the IDs ARE present.
                 if (locationEl) {
                     locationEl.textContent = p.farm_province_id ? 'Saved — full address shown after sync' : '—';
                 }
 
-                // current_step reflects the highest step actually saved so
-                // far, which is a reasonable proxy for sections completed
-                // out of the 9 data-entry steps (step 10 is confirmation,
-                // not a data section).
                 if (sectionsEl) {
                     const completed = Math.min(survey.current_step, 9);
                     sectionsEl.textContent = `${completed} of 9`;
+                }
+
+                // NEW: reveal proof-of-interview section if not DA-assisted.
+                if (p.assisted_by_da !== 'yes') {
+                    document.getElementById('proofOfInterviewSection').classList.remove('hidden');
                 }
             } catch (err) {
                 console.error('Failed to load summary from local storage:', err);
@@ -168,11 +205,94 @@
 </script>
 @endif
 
-{{-- NOTE: nextUrl points to surveys.review — SurveyController::storeStep() redirects there
-     (not to a step 11) once the final step is stored successfully. This is the one step
-     whose "next" destination isn't another wizard step. The local flow's next destination
-     is handled internally by local-first-init.blade.php's JS (it redirects to
-     /survey/local/{uuid}/review once step > totalSteps), so no nextUrl is passed there. --}}
+{{-- NEW: Photo + signature capture logic — identical to Step 1's version,
+     wired up here since this section only renders on Step 10 when
+     applicable. Safe to include unconditionally; it no-ops if the
+     elements aren't present (i.e. section is hidden/not rendered). --}}
+<script>
+    (function () {
+        const input = document.getElementById('proofPhotoInput');
+        if (!input) return;
+        const hidden = document.getElementById('proof_photo');
+        const preview = document.getElementById('proofPhotoPreview');
+
+        input.addEventListener('change', function () {
+            const file = this.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                hidden.value = e.target.result;
+                preview.src = e.target.result;
+                preview.classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+        });
+    })();
+
+    (function () {
+        const canvas = document.getElementById('proofSignatureCanvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const hidden = document.getElementById('proof_signature');
+        const clearBtn = document.getElementById('clearSignatureBtn');
+        let drawing = false;
+
+        if (hidden.value) {
+            const img = new Image();
+            img.onload = () => ctx.drawImage(img, 0, 0);
+            img.src = hidden.value;
+        }
+
+        function pos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const point = e.touches ? e.touches[0] : e;
+            return {
+                x: (point.clientX - rect.left) * scaleX,
+                y: (point.clientY - rect.top) * scaleY,
+            };
+        }
+
+        function start(e) {
+            drawing = true;
+            const p = pos(e);
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            e.preventDefault();
+        }
+
+        function draw(e) {
+            if (!drawing) return;
+            const p = pos(e);
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#111827';
+            ctx.lineTo(p.x, p.y);
+            ctx.stroke();
+            e.preventDefault();
+        }
+
+        function end() {
+            if (!drawing) return;
+            drawing = false;
+            hidden.value = canvas.toDataURL('image/png');
+        }
+
+        canvas.addEventListener('mousedown', start);
+        canvas.addEventListener('mousemove', draw);
+        window.addEventListener('mouseup', end);
+        canvas.addEventListener('touchstart', start, { passive: false });
+        canvas.addEventListener('touchmove', draw, { passive: false });
+        canvas.addEventListener('touchend', end);
+
+        clearBtn.addEventListener('click', () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            hidden.value = '';
+        });
+    })();
+</script>
+
 @if (isset($farmer))
 @include('surveys.partials.offline-sync-init', [
     'step' => 10,

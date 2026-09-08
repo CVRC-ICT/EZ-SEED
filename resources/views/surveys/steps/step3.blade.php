@@ -85,7 +85,8 @@
 
             <hr class="border-gray-200">
 
-            {{-- Farm Area breakdown — Total is manual & first, Rice/Corn split by season, HVC flat --}}
+            {{-- Farm Area breakdown — Total is manual & first, Rice/Corn split by season.
+                 NOTE: HVC / Others field removed per request. --}}
             <section>
                 <h3 class="text-base font-semibold text-gray-900 mb-1">Farm Area</h3>
                 <p class="text-sm text-gray-500 mb-4">Land area by season and crop</p>
@@ -103,7 +104,7 @@
                     @enderror
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <div class="bg-amber-50 border border-amber-200 rounded-xl p-5">
                         <h4 class="text-sm font-bold text-amber-800 mb-4">Dry Season</h4>
                         <div class="space-y-4">
@@ -147,16 +148,6 @@
                             </div>
                         </div>
                     </div>
-                </div>
-
-                <div>
-                    <label for="farm_area_hvc" class="block text-sm font-semibold text-gray-700 mb-1.5">
-                        HVC / Others Area (hectares)
-                    </label>
-                    <input type="number" step="0.01" min="0" id="farm_area_hvc" name="farm_area_hvc"
-                           value="{{ old('farm_area_hvc', data_get($old_data, 'farm_area_hvc')) }}"
-                           placeholder="0.00" class="w-full sm:w-1/2 rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 text-base py-2.5 px-3.5">
-                    <p class="mt-1 text-xs text-gray-400">Not split by season</p>
                 </div>
             </section>
 

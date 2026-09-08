@@ -10,6 +10,7 @@ class DAPersonnel extends Model
     use HasFactory;
 
     protected $fillable = [
+        'code',
         'user_id',
         'name',
         'position',

@@ -69,21 +69,6 @@
                 </h3>
                 <div class="flex flex-col sm:flex-row gap-4" role="radiogroup">
                     <label class="flex-1 relative">
-                        {{--
-                            FIX (DA Assisted toggle bug): previously this called
-                            toggleEnumeratorSection(false) unconditionally. When a
-                            saved draft is hydrated, local-first-init.blade.php
-                            dispatches a 'change' event on the radio that ends up
-                            checked — but the OTHER radio in the group could also
-                            receive a stray dispatch in older code, and since these
-                            handlers used a hardcoded true/false rather than
-                            checking their own checked state, the "Yes" radio
-                            (being later in the DOM) always won and left the
-                            DA Personnel section visible even when "No" was
-                            actually selected. Guarding on `this.checked` makes
-                            each handler only act when it is the one actually
-                            selected.
-                        --}}
                         <input type="radio" name="assisted_by_da" value="no" class="peer sr-only"
                                onchange="if (this.checked) toggleEnumeratorSection(false)"
                                {{ old('assisted_by_da', data_get($old_data, 'assisted_by_da', 'no')) == 'no' ? 'checked' : '' }}>
@@ -115,6 +100,20 @@
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    {{-- NEW: Enumerator Code lookup --}}
+                    <div class="sm:col-span-2">
+                        <label for="enumerator_code" class="block text-sm font-semibold text-gray-700 mb-1.5">
+                            Enumerator Code <span class="text-xs font-normal text-gray-500">(optional &mdash; auto-fills your info if you have one)</span>
+                        </label>
+                        <div class="flex gap-2 items-center">
+                            <input type="text" id="enumerator_code" name="enumerator_code"
+                                   value="{{ old('enumerator_code', data_get($old_data, 'enumerator_code')) }}"
+                                   placeholder="e.g. DA-002"
+                                   class="w-full sm:w-64 rounded-lg border-2 border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 text-base py-2.5 px-3.5 bg-white">
+                            <span id="enumeratorCodeStatus" class="text-sm text-gray-500"></span>
+                        </div>
+                    </div>
+
                     <div>
                         <label for="enumerator_name" class="block text-sm font-semibold text-gray-700 mb-1.5">
                             Enumerator Name <span class="text-red-600">*</span>
@@ -245,6 +244,52 @@
                 </div>
             </section>
 
+            {{-- NEW: Proof of Interview — photo + signature, shown only when DA-assisted --}}
+            <section id="proofOfInterviewSection" class="{{ old('assisted_by_da', data_get($old_data, 'assisted_by_da')) == 'yes' ? '' : 'hidden' }} bg-da-green-50/50 border-2 border-da-green-200 rounded-2xl p-5 sm:p-6 space-y-5">
+                <div class="flex items-center gap-2">
+                    <svg class="w-5 h-5 text-da-green-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                    </svg>
+                    <h3 class="text-base font-bold text-gray-900">Proof of Interview</h3>
+                </div>
+                <p class="text-sm text-gray-600 -mt-2">
+                    Since a DA Personnel is assisting, please take a photo and capture the farmer's signature as proof this interview took place.
+                </p>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+                            Photo <span class="text-red-600">*</span>
+                        </label>
+                        <input type="file" id="proofPhotoInput" accept="image/*" capture="environment"
+                               class="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-da-green-600 file:text-white file:font-semibold hover:file:bg-da-green-700 file:cursor-pointer cursor-pointer">
+                        <input type="hidden" name="proof_photo" id="proof_photo" value="{{ old('proof_photo', data_get($old_data, 'proof_photo')) }}">
+                        <img id="proofPhotoPreview" class="mt-3 max-h-48 rounded-lg border border-gray-300 {{ data_get($old_data, 'proof_photo') ? '' : 'hidden' }}"
+                             src="{{ data_get($old_data, 'proof_photo') }}" alt="Photo preview">
+                        @error('proof_photo')
+                            <p class="mt-1.5 text-sm text-red-600 font-medium">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+                            Farmer's Signature <span class="text-red-600">*</span>
+                        </label>
+                        <canvas id="proofSignatureCanvas" width="320" height="140"
+                                class="border-2 border-gray-300 rounded-lg bg-white w-full touch-none cursor-crosshair"></canvas>
+                        <input type="hidden" name="proof_signature" id="proof_signature" value="{{ old('proof_signature', data_get($old_data, 'proof_signature')) }}">
+                        <button type="button" id="clearSignatureBtn"
+                                class="mt-2 text-sm font-semibold text-gray-600 hover:text-gray-800">
+                            Clear Signature
+                        </button>
+                        @error('proof_signature')
+                            <p class="mt-1.5 text-sm text-red-600 font-medium">{{ $message }}</p>
+                        @enderror
+                    </div>
+                </div>
+            </section>
+
             <hr class="border-gray-200">
 
             {{-- Consent Checkboxes --}}
@@ -339,8 +384,11 @@
 
 @push('scripts')
 <script>
+    // UPDATED: now also toggles the new Proof of Interview section, since
+    // that must show/hide exactly in sync with the Enumerator section.
     function toggleEnumeratorSection(show) {
         document.getElementById('enumeratorSection').classList.toggle('hidden', !show);
+        document.getElementById('proofOfInterviewSection').classList.toggle('hidden', !show);
     }
 
     (function () {
@@ -422,6 +470,128 @@
         form.addEventListener('submit', () => {
             municipalitySelect.disabled = false;
             barangaySelect.disabled = false;
+        });
+    })();
+
+    // NEW: Enumerator code lookup — auto-fills name/position/office.
+    (function () {
+        const codeInput = document.getElementById('enumerator_code');
+        const status = document.getElementById('enumeratorCodeStatus');
+        if (!codeInput) return;
+
+        let debounce;
+        codeInput.addEventListener('input', function () {
+            clearTimeout(debounce);
+            const code = this.value.trim();
+            if (!code) { status.textContent = ''; return; }
+
+            debounce = setTimeout(async () => {
+                status.textContent = 'Checking…';
+                status.className = 'text-sm text-gray-500';
+                try {
+                    const res = await fetch(`/enumerator/lookup/${encodeURIComponent(code)}`, {
+                        headers: { Accept: 'application/json' },
+                    });
+                    const data = await res.json();
+
+                    if (data.found) {
+                        status.textContent = '✓ Found — info filled in below';
+                        status.className = 'text-sm text-da-green-700 font-semibold';
+                        document.getElementById('enumerator_name').value = data.name || '';
+                        document.getElementById('enumerator_position').value = data.position || '';
+                        document.getElementById('enumerator_office').value = data.office || '';
+                    } else {
+                        status.textContent = 'New code — fill in your info below';
+                        status.className = 'text-sm text-gray-500';
+                    }
+                } catch (err) {
+                    status.textContent = '';
+                }
+            }, 500);
+        });
+    })();
+
+    // NEW: Photo capture — reads the file, converts to base64 Data URL.
+    (function () {
+        const input = document.getElementById('proofPhotoInput');
+        const hidden = document.getElementById('proof_photo');
+        const preview = document.getElementById('proofPhotoPreview');
+        if (!input) return;
+
+        input.addEventListener('change', function () {
+            const file = this.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                hidden.value = e.target.result;
+                preview.src = e.target.result;
+                preview.classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+        });
+    })();
+
+    // NEW: Signature capture — simple canvas drawing, saved as base64 PNG.
+    (function () {
+        const canvas = document.getElementById('proofSignatureCanvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const hidden = document.getElementById('proof_signature');
+        const clearBtn = document.getElementById('clearSignatureBtn');
+        let drawing = false;
+
+        if (hidden.value) {
+            const img = new Image();
+            img.onload = () => ctx.drawImage(img, 0, 0);
+            img.src = hidden.value;
+        }
+
+        function pos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const point = e.touches ? e.touches[0] : e;
+            return {
+                x: (point.clientX - rect.left) * scaleX,
+                y: (point.clientY - rect.top) * scaleY,
+            };
+        }
+
+        function start(e) {
+            drawing = true;
+            const p = pos(e);
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            e.preventDefault();
+        }
+
+        function draw(e) {
+            if (!drawing) return;
+            const p = pos(e);
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#111827';
+            ctx.lineTo(p.x, p.y);
+            ctx.stroke();
+            e.preventDefault();
+        }
+
+        function end() {
+            if (!drawing) return;
+            drawing = false;
+            hidden.value = canvas.toDataURL('image/png');
+        }
+
+        canvas.addEventListener('mousedown', start);
+        canvas.addEventListener('mousemove', draw);
+        window.addEventListener('mouseup', end);
+        canvas.addEventListener('touchstart', start, { passive: false });
+        canvas.addEventListener('touchmove', draw, { passive: false });
+        canvas.addEventListener('touchend', end);
+
+        clearBtn.addEventListener('click', () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            hidden.value = '';
         });
     })();
 </script>

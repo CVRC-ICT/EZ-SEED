@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Barangay;
+use App\Models\DAPersonnel;
 use App\Models\Farmer;
 use App\Models\Municipality;
 use App\Models\Province;
 use App\Support\PlaceName;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -41,6 +43,32 @@ class SurveyController extends Controller
         return redirect()->route('surveys.step.show', ['farmer' => $farmer, 'step' => 1]);
     }
 
+    /**
+     * NEW: Enumerator code lookup — called via fetch() from Step 1 when the
+     * enumerator types their code. Returns their saved info so the form can
+     * auto-fill name/position/office/location instead of retyping every time.
+     * Returns 404 JSON (not an error page) when the code isn't found yet,
+     * since that's an expected/normal case for a first-time code.
+     */
+    public function lookupEnumerator(string $code): JsonResponse
+    {
+        $personnel = DAPersonnel::where('code', $code)->first();
+
+        if (! $personnel) {
+            return response()->json(['found' => false]);
+        }
+
+        return response()->json([
+            'found' => true,
+            'name' => $personnel->name,
+            'position' => $personnel->position,
+            'office' => $personnel->office,
+            // province/municipality/barangay aren't columns on DAPersonnel
+            // today (only a free-text 'province' string exists), so those
+            // three location selects still need to be picked manually.
+        ]);
+    }
+
     public function showStep(Farmer $farmer, int $step): View|RedirectResponse
     {
         $this->guardStepNumber($step);
@@ -64,9 +92,13 @@ class SurveyController extends Controller
             $viewData['provinces'] = Province::orderBy('name')->get();
         }
 
-        // Step 10 (Final Confirmation) needs a quick summary snapshot.
+        // Step 10 (Final Confirmation) needs a quick summary snapshot, and
+        // needs to know whether the farmer answered alone (no DA assistance)
+        // so it can show the proof-of-interview photo/signature block here
+        // instead of Step 1 (which already shows it for the assisted case).
         if ($step === 10) {
             $viewData['summary'] = $this->buildSummarySnapshot($farmer, $data);
+            $viewData['needsProofHere'] = ($data['assisted_by_da'] ?? null) !== 'yes';
         }
 
         return view("surveys.steps.step{$step}", $viewData)
@@ -168,73 +200,9 @@ class SurveyController extends Controller
                 ->with('error', 'You must certify that the information provided is true before submitting.');
         }
 
-        $referenceNumber = $this->generateReferenceNumber();
+        $result = $this->createSurveyFromPayload($farmer, $data);
 
-        $assistedByDa = ($data['assisted_by_da'] ?? null) === 'yes';
-
-        $daPersonnelId = null;
-        if ($assistedByDa && ! empty($data['enumerator_name'])) {
-            $daPersonnelId = \App\Models\DAPersonnel::firstOrCreate(
-                [
-                    'name' => $data['enumerator_name'],
-                    'office' => $data['enumerator_office'] ?? '',
-                ],
-                [
-                    'position' => $data['enumerator_position'] ?? '',
-                ]
-            )->id;
-        }
-
-        $survey = $farmer->surveys()->create([
-            'reference_number' => $referenceNumber,
-            'payload' => $data,
-            'submitted_at' => now(),
-            'status' => 'submitted',
-            'assisted_by_da_personnel' => $assistedByDa,
-            'd_a_personnel_id' => $daPersonnelId,
-        ]);
-
-        // Step 6 preferences are now nested by season -> seed type -> a list of
-        // variety cards, each carrying its own reasons[] and problems[] arrays
-        // (moved off the old global problems_encountered textarea).
-        foreach (['dry', 'wet'] as $season) {
-            foreach (['hybrid', 'inbred'] as $seedType) {
-                $entries = data_get($data, "preferences.{$season}.{$seedType}", []);
-
-                foreach ($entries as $pref) {
-                    if (empty($pref['variety'])) {
-                        continue;
-                    }
-
-                    $mappedSeason = $this->mapSeason($season);
-                    $mappedSeedType = $this->mapSeedType($seedType);
-                    $reasonLabels = collect($pref['reasons'] ?? [])->implode(', ');
-                    $problemLabels = collect($pref['problems'] ?? [])->implode(', ');
-
-                    $variety = \App\Models\SeedVariety::firstOrCreate(
-                        ['variety_name' => $pref['variety']],
-                        [
-                            'seed_type' => $mappedSeedType,
-                            'season' => $mappedSeason,
-                            'crop_type' => ucfirst($data['crop_type'] ?? 'rice'),
-                            'is_active' => true,
-                        ]
-                    );
-
-                    \App\Models\SeedPreference::create([
-                        'survey_id' => $survey->id,
-                        'seed_variety_id' => $variety->id,
-                        'season' => $mappedSeason,
-                        'seed_type' => $mappedSeedType,
-                        'reason' => $reasonLabels ?: null,
-                        'reason_category' => $this->categorizeReason($reasonLabels),
-                        'problems_encountered' => $problemLabels ?: null,
-                    ]);
-                }
-            }
-        }
-
-        session()->flash('reference_number', $referenceNumber);
+        session()->flash('reference_number', $result['reference_number']);
         session()->flash('success', 'Survey submitted successfully. Thank you for your participation!');
 
         $this->resetSession($farmer);
@@ -306,6 +274,12 @@ class SurveyController extends Controller
             1 => [
                 'assisted_by_da' => ['required', 'in:yes,no'],
 
+                // NEW: optional code — when provided and found, the client
+                // auto-fills the fields below via lookupEnumerator(); the
+                // fields themselves stay editable and are still what's
+                // actually validated/saved.
+                'enumerator_code' => ['nullable', 'string', 'max:50'],
+
                 'enumerator_name' => ['required_if:assisted_by_da,yes', 'nullable', 'string', 'max:255'],
                 'enumerator_position' => ['required_if:assisted_by_da,yes', 'nullable', 'string', 'max:255'],
                 'enumerator_office' => ['required_if:assisted_by_da,yes', 'nullable', 'string', 'max:255'],
@@ -318,6 +292,11 @@ class SurveyController extends Controller
                 'consent_voluntary' => ['required', 'accepted'],
                 'consent_data_privacy' => ['required', 'accepted'],
                 'consent_accurate_info' => ['required', 'accepted'],
+
+                // NEW: proof of interview when DA-assisted. Required only in
+                // that case — captured right here in Step 1.
+                'proof_photo' => ['required_if:assisted_by_da,yes', 'nullable', 'string'],
+                'proof_signature' => ['required_if:assisted_by_da,yes', 'nullable', 'string'],
             ],
 
 
@@ -335,11 +314,16 @@ class SurveyController extends Controller
                 'ethnicity' => ['nullable', 'string', 'max:255'],
                 'ethnicity_others' => ['nullable', 'string', 'max:255'],
                 'educational_attainment' => ['required', 'string', 'max:255'],
-                'contact_number' => ['required', 'string', 'max:20'],
+                // CHANGED: contact number is now optional.
+                'contact_number' => ['nullable', 'string', 'max:20'],
                 'crop_type' => ['required', 'in:rice,corn,both'],
             ],
 
-            // Step 3: Farm Information — Rice & Corn split by season, HVC flat
+            // Step 3: Farm Information — Rice & Corn split by season.
+            // NOTE: farm_area_hvc / HVC removed per request — this rule
+            // stays here only if your Step 3 blade still references it.
+            // If you've removed the HVC field from step-3.blade.php, also
+            // delete the 'farm_area_hvc' line below.
             3 => [
                 'farm_province_id' => ['required', 'exists:provinces,id'],
                 'farm_municipality_id' => ['required', 'exists:municipalities,id'],
@@ -349,7 +333,6 @@ class SurveyController extends Controller
                 'farm_area_rice_wet' => ['nullable', 'numeric', 'min:0'],
                 'farm_area_corn_dry' => ['nullable', 'numeric', 'min:0'],
                 'farm_area_corn_wet' => ['nullable', 'numeric', 'min:0'],
-                'farm_area_hvc' => ['nullable', 'numeric', 'min:0'],
                 'tenurial_status' => ['required', 'string', 'max:255'],
                 'years_farming' => ['required', 'integer', 'min:0', 'max:100'],
                 'household_size' => ['required', 'integer', 'min:1', 'max:30'],
@@ -474,9 +457,15 @@ class SurveyController extends Controller
                 'additional_comments' => ['nullable', 'string', 'max:5000'],
             ],
 
-            // Step 10: Final Confirmation
+            // Step 10: Final Confirmation.
+            // NEW: proof photo/signature required ONLY when the farmer
+            // answered without DA assistance (captured here instead of
+            // Step 1, since that's the only place we know 'assisted_by_da'
+            // by the time we reach the end of the wizard).
             10 => [
                 'certification' => ['required', 'accepted'],
+                'proof_photo' => ['required_if:assisted_by_da,no', 'nullable', 'string'],
+                'proof_signature' => ['required_if:assisted_by_da,no', 'nullable', 'string'],
             ],
 
             default => [],
@@ -488,6 +477,7 @@ class SurveyController extends Controller
         return match ($step) {
             1 => [
                 'assisted_by_da' => 'assisted by DA personnel',
+                'enumerator_code' => 'enumerator code',
                 'enumerator_name' => 'enumerator name',
                 'enumerator_position' => 'enumerator position',
                 'enumerator_office' => 'enumerator office',
@@ -497,6 +487,8 @@ class SurveyController extends Controller
                 'consent_voluntary' => 'voluntary participation consent',
                 'consent_data_privacy' => 'data privacy consent',
                 'consent_accurate_info' => 'accurate information consent',
+                'proof_photo' => 'proof-of-interview photo',
+                'proof_signature' => 'proof-of-interview signature',
             ],
             2 => [
                 'is_rsbsa_member' => 'RSBSA membership',
@@ -506,6 +498,10 @@ class SurveyController extends Controller
                 'farm_province_id' => 'farm province',
                 'farm_municipality_id' => 'farm municipality',
                 'farm_barangay_id' => 'farm barangay',
+            ],
+            10 => [
+                'proof_photo' => 'proof-of-interview photo',
+                'proof_signature' => 'proof-of-interview signature',
             ],
             default => [],
         };
@@ -623,15 +619,10 @@ class SurveyController extends Controller
 
     /* =====================================================================
      | Shared logic — used by both the session-based web wizard's submit()
-     | and the new API-based offline sync controller, so validation and
+     | and the API-based offline sync controller, so validation and
      | creation logic exists in exactly one place.
      |====================================================================*/
 
-    /**
-     * Full-payload validation rules — the union of every step's rules,
-     * for validating a complete offline survey submitted in one request.
-     * Deliberately reuses rulesForStep() rather than duplicating any rule.
-     */
     public function allStepRules(): array
     {
         $all = [];
@@ -641,15 +632,6 @@ class SurveyController extends Controller
         return $all;
     }
 
-    /**
-     * Find an existing farmer by RSBSA number (when the farmer identifies as
-     * an RSBSA member) rather than blindly creating a new row every time.
-     * NOTE: `rsbsa_number` has no unique constraint at the DB level today —
-     * this deliberately does not add one (schema changes were explicitly
-     * out of scope), so if duplicates already exist the first match wins.
-     * Falls back to creating a new Farmer when no match is found or the
-     * farmer isn't an RSBSA member.
-     */
     public function findOrCreateFarmer(array $data): Farmer
     {
         $isRsbsaMember = ($data['is_rsbsa_member'] ?? null) === 'yes';
@@ -686,9 +668,9 @@ class SurveyController extends Controller
 
     /**
      * Create the Survey + SeedPreference records from a complete survey
-     * payload. This is the exact same logic that previously lived inline
-     * inside submit() — extracted so both the web wizard and the API sync
-     * endpoint call one shared, tested code path.
+     * payload. Also handles: creating/updating the DAPersonnel record with
+     * its lookup 'code' (NEW), and saving the proof photo/signature (NEW)
+     * onto the survey row, whichever step they were captured on.
      */
     public function createSurveyFromPayload(Farmer $farmer, array $data): array
     {
@@ -698,7 +680,7 @@ class SurveyController extends Controller
 
         $daPersonnelId = null;
         if ($assistedByDa && ! empty($data['enumerator_name'])) {
-            $daPersonnelId = \App\Models\DAPersonnel::firstOrCreate(
+            $daPersonnel = DAPersonnel::firstOrCreate(
                 [
                     'name' => $data['enumerator_name'],
                     'office' => $data['enumerator_office'] ?? '',
@@ -706,7 +688,16 @@ class SurveyController extends Controller
                 [
                     'position' => $data['enumerator_position'] ?? '',
                 ]
-            )->id;
+            );
+
+            // NEW: if the enumerator typed a code this time and their
+            // record doesn't have one yet, save it now so future surveys
+            // can look them up by that code.
+            if (! empty($data['enumerator_code']) && empty($daPersonnel->code)) {
+                $daPersonnel->update(['code' => $data['enumerator_code']]);
+            }
+
+            $daPersonnelId = $daPersonnel->id;
         }
 
         $survey = $farmer->surveys()->create([
@@ -716,6 +707,11 @@ class SurveyController extends Controller
             'status' => 'submitted',
             'assisted_by_da_personnel' => $assistedByDa,
             'd_a_personnel_id' => $daPersonnelId,
+            // NEW: proof of interview — whichever step it was captured on
+            // (Step 1 if assisted, Step 10 if not), it ends up in the same
+            // session data by submit time, so this one line covers both.
+            'proof_photo' => $data['proof_photo'] ?? null,
+            'proof_signature' => $data['proof_signature'] ?? null,
         ]);
 
         $problemsEncounteredFlat = is_array($data['problems_encountered'] ?? null)

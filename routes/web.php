@@ -129,6 +129,8 @@ Route::get('/provinces', function () {
     );
 })->name('provinces.index');
 
+Route::get('/enumerator/lookup/{code}', [SurveyController::class, 'lookupEnumerator'])
+    ->name('enumerator.lookup');
 
 // Get Municipalities by Province
 Route::get('/municipalities/{province}', 

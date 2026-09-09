@@ -10,11 +10,73 @@
         $savedPlanted = [[]]; // always render at least one blank row
     }
     $savedPlanted = array_values($savedPlanted);
+
+    // Crop dropdown options. Value format: "{crop}_{type}" e.g. "rice_hybrid".
+    $cropOptions = [
+        'rice_inbred' => 'Rice (Inbred)',
+        'rice_hybrid' => 'Rice (Hybrid)',
+        'corn_opv' => 'Corn (OPV)',
+        'corn_hybrid' => 'Corn (Hybrid)',
+    ];
+
+    // Same variety lists used in Step 6, keyed the same way as the crop
+    // dropdown values above so the JS can look them up directly.
+    $varietyOptions = [
+        'rice_hybrid' => [
+            'PSB Rc 26H (Magat)', 'PSB Rc 72H (Mestizo 1)', 'PSB Rc 76H (Panay)',
+            'NSIC Rc 114H (Mestizo 2)', 'NSIC Rc 116H (Mestizo 3)', 'NSIC Rc 124H (Mestizo 4)',
+            'NSIC Rc 126H (Mestizo 5)', 'NSIC Rc 132H (Mestizo 6)', 'NSIC Rc 162H', 'NSIC Rc 164H',
+            'NSIC Rc 202H (Mestiso 19)', 'NSIC Rc 204H (Mestiso 20)', 'NSIC Rc 240H (Mestiso 22)',
+            'NSIC Rc 244H (Mestiso 29)', 'NSIC Rc 262H (Mestiso 38)', 'NSIC Rc 518H', 'NSIC Rc 522H',
+            'NSIC Rc 550H', 'NSIC Rc 552H', 'NSIC Rc 586H', 'NSIC Rc 588H', 'NSIC Rc 614H',
+            'NSIC Rc 616H', 'NSIC Rc 618H',
+        ],
+        'rice_inbred' => [
+            'NSIC Rc 18', 'NSIC Rc 160', 'NSIC Rc 216', 'NSIC Rc 218', 'NSIC Rc 222', 'NSIC Rc 238',
+            'NSIC Rc 300', 'NSIC Rc 302', 'NSIC Rc 308', 'NSIC Rc 352', 'NSIC Rc 354 (Tubigan 28)',
+            'NSIC Rc 356', 'NSIC Rc 358 (Tubigan 30)', 'NSIC Rc 394', 'NSIC Rc 400', 'NSIC Rc 402',
+            'NSIC Rc 480', 'NSIC Rc 506', 'NSIC Rc 508', 'NSIC Rc 512', 'NSIC Rc 534', 'NSIC Rc 558',
+            'NSIC Rc 560', 'NSIC Rc 562', 'NSIC Rc 564', 'NSIC Rc 568', 'NSIC Rc 572', 'NSIC Rc 574',
+            'NSIC Rc 578', 'NSIC Rc 580', 'NSIC Rc 582', 'NSIC Rc 584', 'NSIC Rc 592', 'NSIC Rc 594',
+            'NSIC Rc 600', 'NSIC Rc 602', 'NSIC Rc 604', 'NSIC Rc 622', 'NSIC Rc 624', 'NSIC Rc 626',
+            'NSIC Rc 628', 'NSIC Rc 630', 'NSIC Rc 632', 'NSIC Rc 634', 'NSIC Rc 636',
+            'NSIC Rc 638 SR (Special-purpose/pigmented)', 'NSIC Rc 640 SR (Special-purpose/pigmented)',
+            'NSIC Rc 642 SR (Special-purpose/pigmented)', 'NSIC Rc 644 SR (Special-purpose/pigmented)',
+            'NSIC Rc 646 SR (Special-purpose/pigmented)', 'NSIC Rc 648 (Zinc-biofortified)',
+            'NSIC Rc 650 (Rainfed lowland)',
+        ],
+        'corn_hybrid' => [
+            'CW 851', 'TSG 398', 'TSG 361', 'TSG 81', 'P30B80', 'P30T80', 'P3482YR', 'PAC 105',
+            'Healer 101', 'P30D44', 'Bioseed 9899', 'Ghen 703', 'EG501', 'USM Var 35', 'Filipina 753',
+            'Ghen 802', 'Farco 88',
+            'DK8899S (GM Hybrid)', 'NK6130 BGT (GM Hybrid)', 'H101G (GM Hybrid)',
+            'J505 (GM Hybrid)', 'DK9132RRYG (GM Hybrid)', 'DK9132RRYG2 (GM Hybrid)',
+        ],
+        'corn_opv' => [
+            'IES Cn 5 (Yellow OPV)', 'IES Cn 7 (Yellow OPV)', 'IES 89-06 (White OPV)',
+            'IES 89-10 (White OPV)', 'IES 89-12 (White OPV)', 'IES 09-02 (White OPV)',
+            'IES Glut #2 (Glutinous OPV)', 'IES Glut #3 (Glutinous OPV)', 'IES Glut #4 (Glutinous OPV)',
+            'IES Glut #6 (Glutinous OPV)', 'IES Glut #7 (Glutinous OPV)', 'Tupi 1 WIT', 'Tupi WIT',
+            'Farco 58', 'IES Cn 1 (IES Var 7)', 'IES Cn 2 (IES Var 2)', 'IES Glut # 1', 'IES Cn 6',
+            'IES E-02', 'IES Cn 3', 'IES Cn 4', 'IES 09-2', 'IES Cn 9', 'IES 10-04', 'IES Glut 8',
+            'IES Glut 10', 'IES Cn 11', 'CVRC Cn 13', 'CVRC 12-06', 'CVRC Glut No. 12', 'CVRC Cn 15',
+            'CVRC Glut No. 18-14', 'CVRC Glut 21-16',
+        ],
+    ];
 @endphp
 
 @section('content')
 <form id="wizardStepForm" method="POST" action="{{ isset($farmer) ? route('surveys.step.store', ['farmer' => $farmer, 'step' => 7]) : url("/survey/local/{$uuid}/step/7") }}" novalidate>
     @csrf
+
+    {{-- Variety dropdown suggestions, one datalist per crop+type combination --}}
+    @foreach ($varietyOptions as $key => $options)
+        <datalist id="plantedVarietyList_{{ $key }}">
+            @foreach ($options as $option)
+                <option value="{{ $option }}">
+            @endforeach
+        </datalist>
+    @endforeach
 
     <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
 
@@ -37,7 +99,7 @@
 
         <div class="px-6 sm:px-8 py-7">
             <div class="overflow-x-auto rounded-xl border border-gray-200">
-                <table class="min-w-[720px] w-full divide-y divide-gray-200 text-sm">
+                <table class="min-w-[760px] w-full divide-y divide-gray-200 text-sm">
                     <thead class="bg-da-green-700 text-white">
                         <tr>
                             <th class="px-4 py-3 text-left font-semibold">Season <span class="text-red-200">*</span></th>
@@ -50,6 +112,10 @@
                     </thead>
                     <tbody id="plantedRows" class="bg-white divide-y divide-gray-100">
                         @foreach ($savedPlanted as $index => $row)
+                            @php
+                                $savedCropKey = $row['crop'] ?? '';
+                                $datalistId = $savedCropKey ? "plantedVarietyList_{$savedCropKey}" : null;
+                            @endphp
                             <tr class="planted-row">
                                 <td class="px-4 py-3">
                                     <select name="planted[{{ $index }}][season]" required
@@ -60,14 +126,22 @@
                                     </select>
                                 </td>
                                 <td class="px-4 py-3">
-                                    <input type="text" name="planted[{{ $index }}][crop]" placeholder="e.g. Rice, Corn" required
-                                           value="{{ $row['crop'] ?? '' }}"
-                                           class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5">
+                                    {{-- CHANGED: Crop is now a dropdown with the 4 crop+type combinations,
+                                         instead of free text. Selecting one updates the Variety dropdown
+                                         in this same row via updatePlantedVarietyList(). --}}
+                                    <select name="planted[{{ $index }}][crop]" required onchange="updatePlantedVarietyList(this)"
+                                            class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5">
+                                        <option value="" disabled {{ empty($savedCropKey) ? 'selected' : '' }}>Select</option>
+                                        @foreach ($cropOptions as $key => $label)
+                                            <option value="{{ $key }}" {{ $savedCropKey == $key ? 'selected' : '' }}>{{ $label }}</option>
+                                        @endforeach
+                                    </select>
                                 </td>
                                 <td class="px-4 py-3">
-                                    <input type="text" name="planted[{{ $index }}][variety]" placeholder="e.g. NSIC Rc 216" required
+                                    <input type="text" name="planted[{{ $index }}][variety]" placeholder="Type or select a variety" required
                                            value="{{ $row['variety'] ?? '' }}"
-                                           class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5">
+                                           list="{{ $datalistId }}"
+                                           class="planted-variety-input w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5">
                                 </td>
                                 <td class="px-4 py-3">
                                     <input type="number" step="0.01" min="0" name="planted[{{ $index }}][area]" required
@@ -131,6 +205,22 @@
 <script>
     let plantedIndex = document.querySelectorAll('.planted-row').length;
 
+    // NEW: called when a row's Crop dropdown changes — points that row's
+    // Variety input at the matching datalist (e.g. "rice_hybrid" ->
+    // #plantedVarietyList_rice_hybrid), and clears any previously typed
+    // variety name since it may not belong to the new crop/type.
+    function updatePlantedVarietyList(select) {
+        const row = select.closest('tr');
+        const varietyInput = row.querySelector('.planted-variety-input');
+        const cropKey = select.value;
+        if (cropKey) {
+            varietyInput.setAttribute('list', `plantedVarietyList_${cropKey}`);
+        } else {
+            varietyInput.removeAttribute('list');
+        }
+        varietyInput.value = '';
+    }
+
     function addPlantedRow() {
         const index = plantedIndex;
         const tbody = document.getElementById('plantedRows');
@@ -144,8 +234,16 @@
                     <option value="wet">Wet Season</option>
                 </select>
             </td>
-            <td class="px-4 py-3"><input type="text" name="planted[${index}][crop]" placeholder="e.g. Rice, Corn" required class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5"></td>
-            <td class="px-4 py-3"><input type="text" name="planted[${index}][variety]" placeholder="e.g. NSIC Rc 216" required class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5"></td>
+            <td class="px-4 py-3">
+                <select name="planted[${index}][crop]" required onchange="updatePlantedVarietyList(this)" class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5">
+                    <option value="" disabled selected>Select</option>
+                    <option value="rice_inbred">Rice (Inbred)</option>
+                    <option value="rice_hybrid">Rice (Hybrid)</option>
+                    <option value="corn_opv">Corn (OPV)</option>
+                    <option value="corn_hybrid">Corn (Hybrid)</option>
+                </select>
+            </td>
+            <td class="px-4 py-3"><input type="text" name="planted[${index}][variety]" placeholder="Type or select a variety" required class="planted-variety-input w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5"></td>
             <td class="px-4 py-3"><input type="number" step="0.01" min="0" name="planted[${index}][area]" required class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5"></td>
             <td class="px-4 py-3"><input type="number" step="0.01" min="0" name="planted[${index}][yield]" required class="w-full rounded-lg border-gray-300 focus:border-da-green-600 focus:ring-da-green-600 py-2 px-2.5"></td>
             <td class="px-4 py-3 text-center">

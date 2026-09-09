@@ -28,6 +28,27 @@
                 {{-- FILTER BAR --}}
                 <form method="GET" action="{{ route('dashboard') }}" id="dashboardFilters"
                       class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+
+                    {{-- NEW: Crop toggle — All / Rice / Corn. Hidden input holds
+                         the actual value submitted with the form; clicking a
+                         button sets it and resubmits immediately. --}}
+                    <div class="flex items-center gap-2 mb-4 pb-4 border-b border-gray-100">
+                        <span class="text-xs font-semibold text-gray-500 uppercase mr-1">Crop:</span>
+                        <input type="hidden" name="crop" id="filterCropInput" value="{{ $filters['crop'] }}">
+                        <button type="button" onclick="setCropFilter('')"
+                                class="crop-filter-btn px-4 py-1.5 rounded-full text-sm font-semibold border transition {{ $filters['crop'] === null || $filters['crop'] === '' ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50' }}">
+                            All Crops
+                        </button>
+                        <button type="button" onclick="setCropFilter('rice')"
+                                class="crop-filter-btn px-4 py-1.5 rounded-full text-sm font-semibold border transition {{ $filters['crop'] === 'rice' ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50' }}">
+                            🌾 Rice
+                        </button>
+                        <button type="button" onclick="setCropFilter('corn')"
+                                class="crop-filter-btn px-4 py-1.5 rounded-full text-sm font-semibold border transition {{ $filters['crop'] === 'corn' ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50' }}">
+                            🌽 Corn
+                        </button>
+                    </div>
+
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
                         <select name="province" id="filterProvince" onchange="onProvinceChange(this.value)"
                                 class="rounded-lg border-gray-300 text-sm">
@@ -104,7 +125,9 @@
                 {{-- TOP VARIETIES + FARMERS BY PROVINCE --}}
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-                        <h3 class="font-semibold text-gray-800 dark:text-gray-100">Top Preferred Rice Varieties</h3>
+                        <h3 class="font-semibold text-gray-800 dark:text-gray-100">
+                            Top Preferred {{ $filters['crop'] ? ucfirst($filters['crop']) . ' ' : '' }}Varieties
+                        </h3>
                         <p class="text-xs text-gray-400 mb-4">
                             Based on all recorded preference entries (ranking is no longer captured in the survey)
                         </p>
@@ -239,6 +262,13 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     @include('dashboard._chart-colors')
     <script>
+        // NEW: Crop filter buttons — set the hidden input and resubmit the
+        // filter form immediately, same as changing any other dropdown.
+        function setCropFilter(crop) {
+            document.getElementById('filterCropInput').value = crop;
+            document.getElementById('dashboardFilters').submit();
+        }
+
         async function onProvinceChange(provinceId) {
             const muniSelect = document.getElementById('filterMunicipality');
             if (!provinceId) {

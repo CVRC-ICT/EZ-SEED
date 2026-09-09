@@ -39,13 +39,17 @@ class DashboardController extends Controller
             'season' => $request->input('season'),
             'seed_type' => $request->input('seed_type'),
             'year' => $request->input('year'),
+            // NEW: 'rice' or 'corn' (empty = All Crops). Filters via the
+            // related SeedVariety's crop_type column, since SeedPreference
+            // itself doesn't store crop directly.
+            'crop' => $request->input('crop'),
         ];
     }
 
     /**
      * Base SeedPreference query, scoped to the current user's surveys and
      * joined through survey -> farmer so province/municipality/year filters
-     * can be applied, plus direct season/seed_type filters.
+     * can be applied, plus direct season/seed_type/crop filters.
      */
     protected function filteredPreferenceQuery(array $filters)
     {
@@ -77,13 +81,20 @@ class DashboardController extends Controller
             $query->where('seed_type', $filters['seed_type']);
         }
 
+        // NEW: Crop filter (Rice/Corn), via the related SeedVariety.
+        if ($filters['crop']) {
+            $query->whereHas('seedVariety', function ($vq) use ($filters) {
+                $vq->where('crop_type', ucfirst($filters['crop']));
+            });
+        }
+
         return $query;
     }
 
     /**
      * Base Farmer query, scoped + filtered by province/municipality/year and,
-     * if season/seed_type are set, restricted to farmers who have at least
-     * one matching seed preference.
+     * if season/seed_type/crop are set, restricted to farmers who have at
+     * least one matching seed preference.
      */
     protected function filteredFarmerQuery(bool $isAdmin, array $filters)
     {
@@ -98,18 +109,23 @@ class DashboardController extends Controller
             $query->where('municipality_id', $filters['municipality']);
         }
 
-        if ($filters['year'] || $filters['season'] || $filters['seed_type']) {
+        if ($filters['year'] || $filters['season'] || $filters['seed_type'] || $filters['crop']) {
             $query->whereHas('surveys', function ($sq) use ($filters) {
                 if ($filters['year']) {
                     $sq->whereYear(DB::raw('COALESCE(submitted_at, created_at)'), $filters['year']);
                 }
-                if ($filters['season'] || $filters['seed_type']) {
+                if ($filters['season'] || $filters['seed_type'] || $filters['crop']) {
                     $sq->whereHas('seedPreferences', function ($pq) use ($filters) {
                         if ($filters['season']) {
                             $pq->where('season', $filters['season']);
                         }
                         if ($filters['seed_type']) {
                             $pq->where('seed_type', $filters['seed_type']);
+                        }
+                        if ($filters['crop']) {
+                            $pq->whereHas('seedVariety', function ($vq) use ($filters) {
+                                $vq->where('crop_type', ucfirst($filters['crop']));
+                            });
                         }
                     });
                 }
@@ -442,9 +458,6 @@ class DashboardController extends Controller
             $baseQuery->whereDoesntHave('surveys', fn ($q) => $q->where('assisted_by_da_personnel', true));
         }
 
-        // RSBSA tab counts computed on the same filtered scope (search/province/
-        // portal_only applied), but BEFORE the rsbsa tab filter itself, so each
-        // tab shows an accurate count relative to the other active filters.
         $rsbsaCounts = [
             'all' => (clone $baseQuery)->count(),
             'registered' => (clone $baseQuery)->whereNotNull('rsbsa_number')->where('rsbsa_number', '!=', '')->count(),
@@ -505,9 +518,6 @@ class DashboardController extends Controller
                 ->get();
         };
 
-        // problems_encountered is a comma-separated string (flattened from
-        // checkbox selections in the survey). Split + humanize each piece
-        // rather than treating the whole raw string as one label.
         $problemsTally = [];
         (clone $preferenceQuery)
             ->whereNotNull('problems_encountered')
@@ -526,9 +536,6 @@ class DashboardController extends Controller
         arsort($problemsTally);
         $problemsTally = collect($problemsTally)->take(6);
 
-        // Seed Selection Criteria — from Step 5's seed_criteria, stored on the
-        // parent Survey's payload (not a seed_preferences column), so pull it
-        // via the related surveys rather than the preference query.
         $criteriaTally = [];
         Survey::whereIn('id', $surveyIds)
             ->whereNotNull('payload')
@@ -570,8 +577,6 @@ class DashboardController extends Controller
 
         $preferenceQuery = SeedPreference::whereIn('survey_id', $surveyIds);
 
-        // Responses per month, split by season. Uses submitted_at when set,
-        // otherwise falls back to created_at.
         $monthly = Survey::whereIn('id', $surveyIds)
             ->where('status', 'submitted')
             ->select(
@@ -587,8 +592,6 @@ class DashboardController extends Controller
             ->orderBy('month')
             ->get();
 
-        // Top varieties compared Dry vs Wet Season — same comparison chart
-        // style used on the main Dashboard, scoped to this user's surveys.
         $topVarietyIds = (clone $preferenceQuery)
             ->select('seed_variety_id', DB::raw('COUNT(*) as total'))
             ->groupBy('seed_variety_id')
@@ -636,23 +639,6 @@ class DashboardController extends Controller
         ]);
     }
 
-    /**
-     * JSON data endpoint powering the Response Intensity map.
-     *
-     * Response Intensity = Submitted Surveys ÷ Registered Farmers, per
-     * province or municipality. This is deliberately NOT based on a
-     * "target/quota" figure, since EZ-Seed has no such field anywhere in
-     * the schema (this was a conscious decision made earlier in the
-     * project for the Reports module). It uses only real farmers/surveys
-     * data:
-     *   0–40%  = Low
-     *   41–70% = Medium
-     *   71–100% = High
-     *   0 registered farmers = No Data (not "Low" — there's nothing to rate)
-     *
-     * level=province  -> stats for the 5 Region II provinces
-     * level=municipality&province_id=X -> stats for municipalities in X
-     */
     public function provinceMapData(Request $request)
     {
         $level = $request->input('level', 'province');
@@ -686,7 +672,6 @@ class DashboardController extends Controller
             return response()->json(['level' => 'municipality', 'rows' => $rows]);
         }
 
-        // level === 'province'
         $provinces = Province::orderBy('name')->get();
 
         $rows = $provinces->map(function ($province) use ($applyYear) {
@@ -728,16 +713,9 @@ class DashboardController extends Controller
     |--------------------------------------------------------------------
     | 6. DASHBOARD PDF EXPORT
     |--------------------------------------------------------------------
-    | Requires barryvdh/laravel-dompdf. Install with:
-    |   composer require barryvdh/laravel-dompdf
-    | If not installed, this route will throw a clear "class not found"
-    | error rather than failing silently.
     */
     public function exportPdf(Request $request)
     {
-        // Reuse the same filtered index() computation so the PDF matches
-        // exactly what's on screen. We call index() and pull its view data
-        // back out rather than duplicating all the query logic.
         $response = $this->index($request);
         $data = $response->getData();
 

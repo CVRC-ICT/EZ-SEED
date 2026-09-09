@@ -100,7 +100,7 @@
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    {{-- NEW: Enumerator Code lookup --}}
+                    {{-- Enumerator Code lookup --}}
                     <div class="sm:col-span-2">
                         <label for="enumerator_code" class="block text-sm font-semibold text-gray-700 mb-1.5">
                             Enumerator Code <span class="text-xs font-normal text-gray-500">(optional &mdash; auto-fills your info if you have one)</span>
@@ -244,7 +244,7 @@
                 </div>
             </section>
 
-            {{-- NEW: Proof of Interview — photo + signature, shown only when DA-assisted --}}
+            {{-- Proof of Interview — photo + signature, shown only when DA-assisted --}}
             <section id="proofOfInterviewSection" class="{{ old('assisted_by_da', data_get($old_data, 'assisted_by_da')) == 'yes' ? '' : 'hidden' }} bg-da-green-50/50 border-2 border-da-green-200 rounded-2xl p-5 sm:p-6 space-y-5">
                 <div class="flex items-center gap-2">
                     <svg class="w-5 h-5 text-da-green-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -258,15 +258,42 @@
                 </p>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    {{-- Photo — live camera OR upload --}}
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">
                             Photo <span class="text-red-600">*</span>
                         </label>
-                        <input type="file" id="proofPhotoInput" accept="image/*" capture="environment"
-                               class="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-da-green-600 file:text-white file:font-semibold hover:file:bg-da-green-700 file:cursor-pointer cursor-pointer">
+
                         <input type="hidden" name="proof_photo" id="proof_photo" value="{{ old('proof_photo', data_get($old_data, 'proof_photo')) }}">
+
+                        <div id="cameraPreviewWrap" class="hidden mb-3">
+                            <video id="cameraVideo" autoplay playsinline class="w-full rounded-lg border border-gray-300 bg-black max-h-64 object-cover"></video>
+                            <div class="flex gap-2 mt-2">
+                                <button type="button" id="capturePhotoBtn"
+                                        class="flex-1 px-4 py-2 rounded-lg bg-da-green-600 text-white font-semibold text-sm hover:bg-da-green-700">
+                                    📸 Capture
+                                </button>
+                                <button type="button" id="cancelCameraBtn"
+                                        class="px-4 py-2 rounded-lg border-2 border-gray-300 text-gray-700 font-semibold text-sm hover:bg-gray-100">
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="photoChoiceButtons" class="flex flex-col sm:flex-row gap-2">
+                            <button type="button" id="openCameraBtn"
+                                    class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-da-green-600 text-white font-semibold text-sm hover:bg-da-green-700">
+                                📷 Take Photo (Live Camera)
+                            </button>
+                            <label class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border-2 border-gray-300 text-gray-700 font-semibold text-sm hover:bg-gray-100 cursor-pointer">
+                                ⬆️ Upload Photo
+                                <input type="file" id="proofPhotoInput" accept="image/*" class="hidden">
+                            </label>
+                        </div>
+
                         <img id="proofPhotoPreview" class="mt-3 max-h-48 rounded-lg border border-gray-300 {{ data_get($old_data, 'proof_photo') ? '' : 'hidden' }}"
                              src="{{ data_get($old_data, 'proof_photo') }}" alt="Photo preview">
+
                         @error('proof_photo')
                             <p class="mt-1.5 text-sm text-red-600 font-medium">{{ $message }}</p>
                         @enderror
@@ -384,8 +411,6 @@
 
 @push('scripts')
 <script>
-    // UPDATED: now also toggles the new Proof of Interview section, since
-    // that must show/hide exactly in sync with the Enumerator section.
     function toggleEnumeratorSection(show) {
         document.getElementById('enumeratorSection').classList.toggle('hidden', !show);
         document.getElementById('proofOfInterviewSection').classList.toggle('hidden', !show);
@@ -473,7 +498,7 @@
         });
     })();
 
-    // NEW: Enumerator code lookup — auto-fills name/position/office.
+    // Enumerator code lookup — auto-fills name/position/office.
     (function () {
         const codeInput = document.getElementById('enumerator_code');
         const status = document.getElementById('enumeratorCodeStatus');
@@ -511,14 +536,65 @@
         });
     })();
 
-    // NEW: Photo capture — reads the file, converts to base64 Data URL.
+    // Photo capture — LIVE CAMERA + UPLOAD, both writing to #proof_photo.
     (function () {
-        const input = document.getElementById('proofPhotoInput');
+        const openCameraBtn = document.getElementById('openCameraBtn');
+        const cancelCameraBtn = document.getElementById('cancelCameraBtn');
+        const captureBtn = document.getElementById('capturePhotoBtn');
+        const previewWrap = document.getElementById('cameraPreviewWrap');
+        const choiceButtons = document.getElementById('photoChoiceButtons');
+        const video = document.getElementById('cameraVideo');
+        const fileInput = document.getElementById('proofPhotoInput');
         const hidden = document.getElementById('proof_photo');
         const preview = document.getElementById('proofPhotoPreview');
-        if (!input) return;
 
-        input.addEventListener('change', function () {
+        if (!openCameraBtn) return;
+
+        let stream = null;
+
+        async function openCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' },
+                    audio: false,
+                });
+                video.srcObject = stream;
+                previewWrap.classList.remove('hidden');
+                choiceButtons.classList.add('hidden');
+            } catch (err) {
+                alert('Could not access the camera. You can use "Upload Photo" instead.');
+                console.error('Camera error:', err);
+            }
+        }
+
+        function closeCamera() {
+            if (stream) {
+                stream.getTracks().forEach((track) => track.stop());
+                stream = null;
+            }
+            previewWrap.classList.add('hidden');
+            choiceButtons.classList.remove('hidden');
+        }
+
+        function capturePhoto() {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+            hidden.value = dataUrl;
+            preview.src = dataUrl;
+            preview.classList.remove('hidden');
+
+            closeCamera();
+        }
+
+        openCameraBtn.addEventListener('click', openCamera);
+        cancelCameraBtn.addEventListener('click', closeCamera);
+        captureBtn.addEventListener('click', capturePhoto);
+
+        fileInput.addEventListener('change', function () {
             const file = this.files[0];
             if (!file) return;
             const reader = new FileReader();
@@ -531,7 +607,7 @@
         });
     })();
 
-    // NEW: Signature capture — simple canvas drawing, saved as base64 PNG.
+    // Signature capture — simple canvas drawing, saved as base64 PNG.
     (function () {
         const canvas = document.getElementById('proofSignatureCanvas');
         if (!canvas) return;
@@ -596,11 +672,6 @@
     })();
 </script>
 
-{{-- Offline-first save & sync for this step. The old flow (Farmer model)
-     still uses offline-sync-init, which falls back to a real POST. The new
-     local/uuid flow uses local-first-init, which intercepts submit with
-     preventDefault() and saves everything to IndexedDB — no server route
-     needed, so it can never hit a 405. --}}
 @if (isset($farmer))
 @include('surveys.partials.offline-sync-init', [
     'step' => 1,

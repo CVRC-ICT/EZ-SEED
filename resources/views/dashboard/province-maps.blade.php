@@ -26,6 +26,23 @@
 
                     {{-- FILTERS --}}
                     <div class="flex flex-wrap items-center gap-3 mt-4 mb-2">
+                        {{-- NEW: Crop toggle — All / Rice / Corn --}}
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-semibold text-gray-500 uppercase mr-1">Crop:</span>
+                            <button type="button" id="cropBtnAll" onclick="setCropFilter('')"
+                                    class="crop-filter-btn px-4 py-1.5 rounded-full text-sm font-semibold border transition">
+                                All Crops
+                            </button>
+                            <button type="button" id="cropBtnRice" onclick="setCropFilter('rice')"
+                                    class="crop-filter-btn px-4 py-1.5 rounded-full text-sm font-semibold border transition">
+                                🌾 Rice
+                            </button>
+                            <button type="button" id="cropBtnCorn" onclick="setCropFilter('corn')"
+                                    class="crop-filter-btn px-4 py-1.5 rounded-full text-sm font-semibold border transition">
+                                🌽 Corn
+                            </button>
+                        </div>
+
                         <select id="filterProvince" class="rounded-lg border-gray-300 text-sm">
                             <option value="">All Provinces (Region II)</option>
                             @foreach ($provinces as $province)
@@ -96,6 +113,14 @@
         </div>
     </div>
 
+    @push('styles')
+    <style>
+        .crop-filter-btn { background: #fff; color: #4b5563; border-color: #d1d5db; }
+        .crop-filter-btn:hover { background: #f9fafb; }
+        .crop-filter-btn.active-crop-btn { background: #15803d; color: #fff; border-color: #15803d; }
+    </style>
+    @endpush
+
     @push('scripts')
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -109,6 +134,23 @@
             'Quirino': '205700000',
         };
         const dataEndpoint = @json(route('dashboard.province-maps.data'));
+
+        // NEW: current crop filter state ('' = All, 'rice', 'corn')
+        let currentCrop = '';
+
+        function setCropFilter(crop) {
+            currentCrop = crop;
+            document.querySelectorAll('.crop-filter-btn').forEach((btn) => btn.classList.remove('active-crop-btn'));
+            const btnId = crop === 'rice' ? 'cropBtnRice' : crop === 'corn' ? 'cropBtnCorn' : 'cropBtnAll';
+            document.getElementById(btnId).classList.add('active-crop-btn');
+
+            // Reload whichever level is currently shown, with the new crop filter applied.
+            if (currentLevel === 'municipality') {
+                loadMunicipalityLevel(currentProvinceId, currentProvinceName);
+            } else {
+                loadProvinceLevel();
+            }
+        }
 
         function normalizeName(name) {
             return (name || '')
@@ -133,11 +175,12 @@
 
         const map = L.map('provinceMap', { scrollWheelZoom: false });
 
-        // CartoDB Positron: a lighter, less-labeled basemap than default OSM,
-        // to reduce clutter from neighboring regions' city/town labels.
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-            maxZoom: 14,
+        // CHANGED: CARTO's basemap tiles now require a registered API key
+        // (that's the "API KEY REQUIRED" watermark that was showing). Using
+        // OpenStreetMap's own free tile server instead — no key needed.
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19,
         }).addTo(map);
 
         let currentLayer = null;
@@ -220,6 +263,7 @@
             const params = new URLSearchParams({ level });
             if (provinceId) params.set('province_id', provinceId);
             if (year) params.set('year', year);
+            if (currentCrop) params.set('crop', currentCrop); // NEW
             const res = await fetch(`${dataEndpoint}?${params.toString()}`, { headers: { Accept: 'application/json' } });
             if (!res.ok) throw new Error('Stats fetch failed: ' + res.status);
             return (await res.json()).rows;
@@ -359,6 +403,9 @@
             document.getElementById('filterProvince').value = '';
             loadProvinceLevel();
         });
+
+        // Initialize crop button styling (All Crops active by default).
+        document.getElementById('cropBtnAll').classList.add('active-crop-btn');
 
         loadProvinceLevel();
     </script>

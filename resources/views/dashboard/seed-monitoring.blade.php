@@ -10,8 +10,27 @@
         <div class="flex-1 py-8 px-4 sm:px-6 lg:px-8">
             <div class="max-w-6xl mx-auto space-y-6">
 
-                <form method="GET" action="{{ route('dashboard.seed-monitoring') }}" class="bg-amber-50 border border-amber-100 rounded-2xl p-5">
+                <form method="GET" action="{{ route('dashboard.seed-monitoring') }}" id="seedMonitoringFilters" class="bg-amber-50 border border-amber-100 rounded-2xl p-5">
                     <p class="text-sm font-semibold text-gray-700 mb-3">Filter Options</p>
+
+                    {{-- NEW: Crop toggle — All / Rice / Corn --}}
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="text-xs font-semibold text-gray-500 uppercase mr-1">Crop:</span>
+                        <input type="hidden" name="crop" id="filterCropInput" value="{{ $crop }}">
+                        <button type="button" onclick="setCropFilter('')"
+                                class="px-4 py-1.5 rounded-full text-sm font-semibold border transition {{ $crop === '' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50' }}">
+                            All Crops
+                        </button>
+                        <button type="button" onclick="setCropFilter('rice')"
+                                class="px-4 py-1.5 rounded-full text-sm font-semibold border transition {{ $crop === 'rice' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50' }}">
+                            🌾 Rice
+                        </button>
+                        <button type="button" onclick="setCropFilter('corn')"
+                                class="px-4 py-1.5 rounded-full text-sm font-semibold border transition {{ $crop === 'corn' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50' }}">
+                            🌽 Corn
+                        </button>
+                    </div>
+
                     <div class="flex flex-wrap gap-3">
                         <select name="season" onchange="this.form.submit()"
                                 class="rounded-full border-gray-300 text-sm focus:ring-amber-500 focus:border-amber-500">
@@ -116,6 +135,11 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     @include('dashboard._chart-colors')
     <script>
+        function setCropFilter(crop) {
+            document.getElementById('filterCropInput').value = crop;
+            document.getElementById('seedMonitoringFilters').submit();
+        }
+
         @if ($criteria->count())
         new Chart(document.getElementById('criteriaChart'), {
             type: 'bar',

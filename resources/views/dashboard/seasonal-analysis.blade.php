@@ -10,6 +10,26 @@
         <div class="flex-1 py-8 px-4 sm:px-6 lg:px-8">
             <div class="max-w-6xl mx-auto space-y-6">
 
+                {{-- NEW: Crop filter bar — All / Rice / Corn --}}
+                <form method="GET" action="{{ route('dashboard.seasonal-analysis') }}" id="seasonalFilters" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-semibold text-gray-500 uppercase mr-1">Crop:</span>
+                        <input type="hidden" name="crop" id="filterCropInput" value="{{ $crop }}">
+                        <button type="button" onclick="setCropFilter('')"
+                                class="px-4 py-1.5 rounded-full text-sm font-semibold border transition {{ $crop === '' ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50' }}">
+                            All Crops
+                        </button>
+                        <button type="button" onclick="setCropFilter('rice')"
+                                class="px-4 py-1.5 rounded-full text-sm font-semibold border transition {{ $crop === 'rice' ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50' }}">
+                            🌾 Rice
+                        </button>
+                        <button type="button" onclick="setCropFilter('corn')"
+                                class="px-4 py-1.5 rounded-full text-sm font-semibold border transition {{ $crop === 'corn' ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50' }}">
+                            🌽 Corn
+                        </button>
+                    </div>
+                </form>
+
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <div class="bg-amber-50 border border-amber-100 rounded-2xl p-5">
                         <p class="text-sm text-gray-600">Dry Season Responses</p>
@@ -59,6 +79,11 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     @include('dashboard._chart-colors')
     <script>
+        function setCropFilter(crop) {
+            document.getElementById('filterCropInput').value = crop;
+            document.getElementById('seasonalFilters').submit();
+        }
+
         @if ($varietySeasonal->count())
         new Chart(document.getElementById('varietySeasonalChart'), {
             type: 'bar',

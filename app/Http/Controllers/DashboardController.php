@@ -507,6 +507,14 @@ class DashboardController extends Controller
             $preferenceQuery->where('season', $season);
         }
 
+        // NEW: Crop filter (Rice/Corn), via the related SeedVariety.
+        $crop = $request->input('crop');
+        if ($crop) {
+            $preferenceQuery->whereHas('seedVariety', function ($vq) use ($crop) {
+                $vq->where('crop_type', ucfirst($crop));
+            });
+        }
+
         $topByType = function (string $type) use ($preferenceQuery) {
             return (clone $preferenceQuery)
                 ->where('seed_type', $type)
@@ -552,6 +560,7 @@ class DashboardController extends Controller
         return view('dashboard.seed-monitoring', [
             'isAdmin' => $isAdmin,
             'season' => $season ?? '',
+            'crop' => $crop ?? '',
 
             'totalHybrid' => SeedVariety::where('seed_type', 'Hybrid')->count(),
             'totalInbred' => SeedVariety::where('seed_type', 'Inbred')->count(),
@@ -569,7 +578,7 @@ class DashboardController extends Controller
     | 4. SEASONAL ANALYSIS
     |--------------------------------------------------------------------
     */
-    public function seasonalAnalysis()
+    public function seasonalAnalysis(Request $request)
     {
         $user = Auth::user();
         $isAdmin = $user->isAdminOrSupervisor();
@@ -577,7 +586,27 @@ class DashboardController extends Controller
 
         $preferenceQuery = SeedPreference::whereIn('survey_id', $surveyIds);
 
-        $monthly = Survey::whereIn('id', $surveyIds)
+        // NEW: Crop filter (Rice/Corn), via the related SeedVariety.
+        $crop = $request->input('crop');
+        if ($crop) {
+            $preferenceQuery->whereHas('seedVariety', function ($vq) use ($crop) {
+                $vq->where('crop_type', ucfirst($crop));
+            });
+        }
+
+        // When a crop filter is active, the monthly submitted-survey count
+        // and its Dry/Wet split should only count surveys that actually
+        // have a matching-crop preference recorded — otherwise a "Rice"
+        // filter would still show every submitted survey's month, crop
+        // preference or not.
+        $cropFilteredSurveyIds = $crop
+            ? SeedPreference::whereIn('survey_id', $surveyIds)
+                ->whereHas('seedVariety', fn ($vq) => $vq->where('crop_type', ucfirst($crop)))
+                ->pluck('survey_id')
+                ->unique()
+            : $surveyIds;
+
+        $monthly = Survey::whereIn('id', $cropFilteredSurveyIds)
             ->where('status', 'submitted')
             ->select(
                 DB::raw('EXTRACT(MONTH FROM COALESCE(submitted_at, created_at)) as month'),
@@ -613,6 +642,7 @@ class DashboardController extends Controller
 
         return view('dashboard.seasonal-analysis', [
             'isAdmin' => $isAdmin,
+            'crop' => $crop ?? '',
 
             'dryTotal' => (clone $preferenceQuery)->where('season', 'Dry Season')->count(),
             'wetTotal' => (clone $preferenceQuery)->where('season', 'Wet Season')->count(),
@@ -643,10 +673,25 @@ class DashboardController extends Controller
     {
         $level = $request->input('level', 'province');
         $year = $request->input('year');
+        $crop = $request->input('crop'); // NEW: 'rice' or 'corn'
+
+        // NEW: when a crop filter is set, only count surveys that have at
+        // least one seed preference matching that crop.
+        $cropSurveyIds = $crop
+            ? SeedPreference::whereHas('seedVariety', fn ($vq) => $vq->where('crop_type', ucfirst($crop)))
+                ->pluck('survey_id')
+                ->unique()
+            : null;
 
         $applyYear = function ($query) use ($year) {
             if ($year) {
                 $query->whereYear(DB::raw('COALESCE(submitted_at, created_at)'), $year);
+            }
+        };
+
+        $applyCrop = function ($query) use ($cropSurveyIds) {
+            if ($cropSurveyIds !== null) {
+                $query->whereIn('id', $cropSurveyIds);
             }
         };
 
@@ -658,12 +703,13 @@ class DashboardController extends Controller
 
             $municipalities = Municipality::where('province_id', $provinceId)->orderBy('name')->get();
 
-            $rows = $municipalities->map(function ($muni) use ($applyYear) {
+            $rows = $municipalities->map(function ($muni) use ($applyYear, $applyCrop) {
                 $farmers = Farmer::where('municipality_id', $muni->id)->count();
 
                 $responsesQuery = Survey::where('status', 'submitted')
                     ->whereHas('farmer', fn ($q) => $q->where('municipality_id', $muni->id));
                 $applyYear($responsesQuery);
+                $applyCrop($responsesQuery);
                 $responses = $responsesQuery->count();
 
                 return $this->intensityRow($muni->id, $muni->name, $farmers, $responses);
@@ -674,12 +720,13 @@ class DashboardController extends Controller
 
         $provinces = Province::orderBy('name')->get();
 
-        $rows = $provinces->map(function ($province) use ($applyYear) {
+        $rows = $provinces->map(function ($province) use ($applyYear, $applyCrop) {
             $farmers = Farmer::where('province_id', $province->id)->count();
 
             $responsesQuery = Survey::where('status', 'submitted')
                 ->whereHas('farmer', fn ($q) => $q->where('province_id', $province->id));
             $applyYear($responsesQuery);
+            $applyCrop($responsesQuery);
             $responses = $responsesQuery->count();
 
             return $this->intensityRow($province->id, $province->name, $farmers, $responses);
